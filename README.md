@@ -4,7 +4,7 @@ Research notes on one question: **can a Meta Quest 3 show passthrough from its i
 
 The PSVR2 does this out of the box: its passthrough comes from monochrome cameras that see near-infrared, so an IR lamp lights the room for the headset while it stays dark to your eyes. The Quest 3 doesn't. Its passthrough comes from the two RGB cameras, so at night the view is black even with an IR illuminator running.
 
-This repo is documentation only. It collects what the headset exposes, what the official APIs allow, and what other people have tried.
+This repo is documentation plus the small tools we used. It collects what the headset exposes, what the official APIs allow, what other people have tried, and the code that reads the tracking-camera frames and displays them live.
 
 ## Short answer (as of October 2026, Horizon OS v79)
 
@@ -39,6 +39,8 @@ Getting at the tracking-camera pixels would mean working inside that HAL on a mo
 | [docs/root-access.md](docs/root-access.md) | Work log: getting a temporary root shell (IonStack / CVE-2026-43499) to reach the tracking-camera HAL |
 | [docs/ir-camera-mapping.md](docs/ir-camera-mapping.md) | Mapping the tracking service's dma-bufs to the physical IR cameras (left/right eye) |
 | [docs/vd-layer-injection.md](docs/vd-layer-injection.md) | Work log: injecting an XR composition layer behind the Virtual Desktop image (route toward showing IR) |
+| [docs/live-ir-feed.md](docs/live-ir-feed.md) | Work log: reading the tracking cameras live and viewing the feed on a PC (`irfeed` daemon + viewer) |
+| [tools/](tools/) | The code: `irfeed.c` daemon, launcher scripts, PC viewer, and dump/cluster helpers |
 | [evidence/](evidence/) | Trimmed `dumpsys` output the inventory is based on |
 
 ## Test device

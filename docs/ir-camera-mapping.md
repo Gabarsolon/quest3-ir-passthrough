@@ -40,3 +40,5 @@ Earlier run, left lens covered: the left-eye set dropped to ~50 while the right-
 - **Streaming requires the headset to be awake.** On standby the driver stops and releases every sensor (`CAM_STOP_DEV`/`CAM_RELEASE_DEV` for `og01a1b 0x7750` and `ov7251 0xd`), so the dma-bufs freeze at their last frame. Covering the proximity sensor is not enough on its own — the headset must actually be streaming.
 - **fd numbers are per-process and change across reboots.** Re-map after every restart using the size histogram plus the cover test. The invariant is the two 13-buffer 640×512 inode ranges.
 - These are still *not* Android cameras: this only reads the tracking pipeline's output from userspace.
+
+See [live-ir-feed.md](live-ir-feed.md) for the live feed, the freshness-based `irfeed` daemon, and the per-eye buffer groups (A/B = left eye, C/D = right eye) at pid 852.
