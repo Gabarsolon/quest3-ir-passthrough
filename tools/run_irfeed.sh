@@ -13,4 +13,8 @@ else
   done
 fi
 echo "fds:$LIST"
-exec ./irfeed $P /data/local/tmp/ir.raw $LIST
+while true; do
+  ./irfeed $P /data/local/tmp/ir.raw $LIST
+  echo "irfeed exited -> restart"
+  sleep 0.3
+done

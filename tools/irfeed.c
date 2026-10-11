@@ -38,8 +38,14 @@ static i64 sys4(long n, long a, long b, long c, long d) { return sys6(n, a, b, c
 #define O_CREAT 0100
 #define O_TRUNC 01000
 #define PROT_READ 1
+#define PROT_WRITE 2
 #define MAP_SHARED 1
+#define MAP_PRIVATE 2
+#define MAP_ANONYMOUS 0x20
 #define CLOCK_MONOTONIC 1
+
+#define IR_W 640
+#define IR_H 512
 
 #define MAXF 64
 #define SZ 327680
@@ -79,6 +85,20 @@ void start_c(long argc, char **argv) {
     char tmpp[128]; long k = 0;
     while (outp[k] && k < 120) { tmpp[k] = outp[k]; k++; }
     tmpp[k++] = '.'; tmpp[k++] = 't'; tmpp[k++] = 'm'; tmpp[k++] = 'p'; tmpp[k] = 0;
+
+    /* rotated-RGBA output path = outpath + ".rgba" (reuses this tmp scheme) */
+    char rgp[160]; long k2 = 0;
+    while (outp[k2] && k2 < 140) { rgp[k2] = outp[k2]; k2++; }
+    const char *ext = ".rgba"; for (long j = 0; ext[j]; j++) rgp[k2++] = ext[j]; rgp[k2] = 0;
+    char rgtp[168]; long k3 = 0;
+    while (rgp[k3] && k3 < 160) { rgtp[k3] = rgp[k3]; k3++; }
+    rgtp[k3++] = '.'; rgtp[k3++] = 't'; rgtp[k3++] = 'm'; rgtp[k3++] = 'p'; rgtp[k3] = 0;
+    char rgs[176]; long k4 = 0;
+    while (rgp[k4] && k4 < 165) { rgs[k4] = rgp[k4]; k4++; }
+    const char *se = ".seq"; for (long j = 0; se[j]; j++) rgs[k4++] = se[j]; rgs[k4] = 0;
+    unsigned long long gseq = 0;
+    unsigned char *rgba = (unsigned char *)sys6(SYS_mmap, 0, SZ * 4, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if ((long)rgba < 0) rgba = 0;
 
     i64 pidfd = sys2(SYS_pidfd_open, pid, 0);
 
@@ -145,6 +165,31 @@ void start_c(long argc, char **argv) {
             }
             sys1(SYS_close, ofd);
             sys4(SYS_renameat, AT_FDCWD, (long)tmpp, AT_FDCWD, (long)outp);
+        }
+        if (rgba) {
+            unsigned int *dst = (unsigned int *)rgba;
+            for (long r = 0; r < IR_H; r++) {
+                long row = r * IR_W;
+                for (long c = 0; c < IR_W; c++) {
+                    unsigned int v = src[row + c];
+                    dst[(IR_W - 1 - c) * IR_H + (IR_H - 1 - r)] = 0xff000000u | (v << 16) | (v << 8) | v;
+                }
+            }
+            long rlen = (long)SZ * 4;
+            i64 rofd = sys4(SYS_openat, AT_FDCWD, (long)rgtp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (rofd >= 0) {
+                long rt = 0;
+                while (rt < rlen) {
+                    i64 w = sys3(SYS_write, rofd, (long)(rgba + rt), rlen - rt);
+                    if (w <= 0) break;
+                    rt += w;
+                }
+                sys1(SYS_close, rofd);
+                sys4(SYS_renameat, AT_FDCWD, (long)rgtp, AT_FDCWD, (long)rgp);
+                gseq++;
+                i64 sfd = sys4(SYS_openat, AT_FDCWD, (long)rgs, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (sfd >= 0) { sys3(SYS_write, sfd, (long)&gseq, 8); sys1(SYS_close, sfd); }
+            }
         }
         iters++;
         if ((iters % 300) == 0) { pw2("irfeed: it="); pnum(iters); pw2(" pick="); pnum(pick); pw2(" score="); pnum((long)ps); pw2("\n"); }

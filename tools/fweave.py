@@ -11,7 +11,7 @@ code = open(r"C:\Users\remus\AppData\Local\Temp\opencode\inject.js").read()
 script = s.create_script(code)
 script.on('message', lambda m, d: P("MSG " + (str(m.get('payload')) if m.get('type') == 'send' else str(m))))
 script.load()
-P("injector loaded; look in headset for a color-gradient quad with moving red bar")
+P("injector loaded; open Virtual Desktop and look behind the desktop for the IR feed")
 
 dur = int(sys.argv[1]) if len(sys.argv) > 1 else 90
 t0 = time.time()
