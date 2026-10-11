@@ -38,6 +38,7 @@ Getting at the tracking-camera pixels would mean working inside that HAL on a mo
 | [docs/prior-art.md](docs/prior-art.md) | Who has tried this and what they found, with links |
 | [docs/root-access.md](docs/root-access.md) | Work log: getting a temporary root shell (IonStack / CVE-2026-43499) to reach the tracking-camera HAL |
 | [docs/ir-camera-mapping.md](docs/ir-camera-mapping.md) | Mapping the tracking service's dma-bufs to the physical IR cameras (left/right eye) |
+| [docs/vd-layer-injection.md](docs/vd-layer-injection.md) | Work log: injecting an XR composition layer behind the Virtual Desktop image (route toward showing IR) |
 | [evidence/](evidence/) | Trimmed `dumpsys` output the inventory is based on |
 
 ## Test device
