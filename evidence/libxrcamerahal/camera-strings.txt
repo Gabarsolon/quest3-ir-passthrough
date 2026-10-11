@@ -1,0 +1,123 @@
+[.rodata] imx722
+[.rodata] %s:%s: %s Adding stream for camera %u (%s) - format: %u width: %u height: %u streamType: %s numBuffers %u - pipeline %d
+[.rodata] You cannot have fastpath and ife-lite gamma compression! Pick either one!
+[.rodata] %s:%s: %s %u Failed to retrieve entry for sensorIspDigitalGain
+[.rodata] %s:%s: %s %u Failed to set isp foveation mode
+[.rodata] %s:%s: XrSensorController must be created first
+[.rodata] overrideManualExposureGainFromSystemProperties
+[.rodata] crimson_ov7251
+[.rodata] imx563
+[.rodata] vendor/meta/libs/xrthal-qc/camera/xrcamerahal/src/XrSensorController.cpp
+[.rodata] %s:%s: aecSensorDataInterface unavailable
+[.rodata] overrideMonoCameraConfigurationFromSystemProperties
+[.rodata] %s:%s: Client MUST FIX: client is returning a streamType %s not present for cameraId %u
+[.rodata] Client MUST FIX: in foveation, use onGetStreamMetadataList!
+[.rodata] Failed to find sensor metadata in camera characteristics
+[.rodata] sensorMetadata == nullptr
+[.rodata] !ispMonoController_->Initialize()
+[.rodata] %s:%s: Failed to populate sensorbps.gain to sensor settings replay
+[.rodata] %s:%s: %s %u frameId %u predictiveGain: %f adrcGainCompensation %f compensationDarkBoostGain %f exposureTimeNs %lu linearGain %f sensitivity %f deltaExposureValueFromTarget %f
+[.rodata] camera %u streamType %s thinks callback thread is frozen
+[.rodata] overrideYuvStreamTypeFromSystemProperties
+[.rodata] !ispMonoController_->Enable()
+[.rodata] %s:%s: %s %u is using fastpath
+[.rodata] configuration->isFeatureEnabled(PipelineControlBase::Feature::kIspFoveation)
+[.rodata] imx681
+[.rodata] %s:%s: Camera %u failed to start %s. You are starting a streamType not present in the original stream configuration. The pipeline will not support this streamType
+[.rodata] Invalid sensor metadata type
+[.rodata] %s:%s: %s replacing 10 bits mono with 8 bits mono for camera %u
+[.rodata] persist.vendor.camera.rgb.min_sensitivity
+[.rodata] overrideFoveationConfigurationFromSystemProperties
+[.rodata] getMonotonicTimestamp
+[.rodata] Failed to fetch sensor metadata tag id
+[.rodata] !xrthal::qc::MetadataTranslator::populate(sensorCapsMetadata, entry.data.u8)
+[.rodata] %s:%s: %s replacing 8 bits yuv with 10 bits yuv for camera %u
+[.rodata] %s:%s: %s %u Stream already exists for streamIdx %u and streamType %s
+[.rodata] %s:%s: Failed to get sensor controller
+[.rodata] %s:%s: %s camera %u cannot find stream index for camera id %u and streamType %s
+[.rodata] EnableIspFoveation
+[.rodata] %s:%s: %s %u sensorSettingsReplay not populated frameId %u
+[.rodata] tagType.value() != kSensorCapsType
+[.rodata] enableFoveation && enableCroppedStream
+[.rodata] isFastpath && enableSecureCamera
+[.rodata] %s:%s: %s Cannot find stream index for camera id %u and streamType %s
+[.rodata] overrideBayerFeatureSetFromSystemProperties
+[.rodata] sensor_drops
+[.rodata] isFastpath && enableMonoGamma
+[.rodata] %s:%s: %s %u is using ultralite
+[.rodata] %s:%s: Fastpath return for %u
+[.rodata] og01a1b
+[.rodata] void OVR::OS::detail::assert_sorted(const std::array<std::pair<IdType, ValueType>, N> &) [N = 22UL, IdType = CameraHal::CameraType, ValueType = const char *]
+[.rodata] MemMapBufferOverriderProtection
+[.rodata] %s:%s: %s %u Failed to enable fastpath driver
+[.rodata] %s:%s: %s Fastpath driver does not support secure stream for camera %u
+[.rodata] com.meta.camera.foveation
+[.rodata] overrideYuvBitDepthFromSystemProperties
+[.rodata] %s:%s: Camera %u could not find sensor brightness ratio - error: %d
+[.rodata] foveation-blend
+[.rodata] IspFoveationMode
+[.rodata] GetIspMonoCameraControlCreator
+[.rodata] failed to find 'GetIspMonoCameraControlCreator' in 'libmonocameracontrol'
+[.rodata] Client MUST FIX: client is returning an unknown streamType in a multi-stream scenario
+[.rodata] %s:%s: Fastpath only supports RAW10 format
+[.rodata] %s:%s: %s cannot find stream index for camera id %u and streamType %s
+[.rodata] %s:%s: Camera %u configuring for Fastpath
+[.rodata] %s:%s: Camera %u failed to retrieve monotonic timestamp!
+[.rodata] EnableFastpath
+[.rodata] Client MUST FIX: in foveation, use GetStreamList!
+[.rodata] %s:%s: %d camera %d monotonic now ts - AP sof ts (%luns) higher than threshold (%luns), Frame ts: %luns Now ts: %luns
+[.rodata] %s:%s: Tag monotonic timestamp has no value
+[.rodata] imx616_mono
+[.rodata] imx611
+[.rodata] imx596
+[.rodata] Invalid sensor name: '%s'
+[.rodata] You cannot have fastpath and ultraLite enabled! Pick either one!
+[.rodata] Invalid sensor metadata
+[.rodata] imx616_rgb
+[.rodata] %s:%s: %s %u number of buffers %u for stream %u streamType %s
+[.rodata] stream->getStreamType() != streamTypeFromString(streamTypeString)
+[.rodata] overrideCommonFeaturesFromSystemProperties
+[.rodata] %s:%s: %s foveation enabled/disable(1/0): %d for camera %u
+[.rodata] %s:%s: %s Fastpath driver does not support gamma-compression for camera %u
+[.rodata] libmonocameracontrol.so
+[.rodata] %s:%s: Tag sensorbps.gain does not exist
+[.rodata] %s:%s: Could not find monotonic timestamp: %d
+[.rodata] %s:%s: Camera type %d sensor %s
+[.rodata] ov7251
+[.rodata] %s:%s: %s replacing non-secure camera with secure camera for camera %u
+[.rodata] Failed to parse sensor metadata for camera %d
+[.rodata] !gIspMonoCameraControlCreatorInstance
+[.rodata] Failed to initialize mono camera ispcontroller for %d
+[.rodata] %s:%s: Camera %u enableYuvPostprocess: %d
+[.rodata] %s:%s: %s YUV output enabled/disable(1/0): %d for camera %u
+[.rodata] %s:%s: Dispatching Camera %u frame %lu streamType: %s
+[.rodata] Failed to fetch sensor metadata tag type
+[.rodata] e2e latency (monotonic now - AP sof timestamp)
+[.rodata] %s:%s: %s %u Failed to enable isp foveation
+[.rodata] %s:%s: %s clearing stream configuration for camera %u due to foveation enabled
+[.rodata] Failed to override Feature %d, it is not available
+[.rodata] failed to dlopen libmonocameracontrol (%s)
+[.rodata] Cannot enable both foveation and strema cropping
+[.rodata] You cannot have fastpath and ife-lite secure camera! Pick either one!
+[.rodata] isFastpath && enableUltraLite
+[.rodata] streamType
+[.rodata] %s:%s: %s camera %u cannot find stream index for camera id %u with streamType %s
+[.rodata] %s:%s: %s %u frameId %u digitalGainForSimulation: %f sensorDigitalGain %f
+[.rodata] parseSensorMetadata
+[.rodata] imx471
+[.rodata] STREAM_RAW8_GAMMA
+[.rodata] STREAM_RAW8_SECURE
+[.rodata] STREAM_RAW10_SECURE
+[.rodata] STREAM_YUV420_FULL_PREPROCESS
+[.rodata] STREAM_YUV420_FOVEA_PREPROCESS
+[.rodata] STREAM_YUV420_PARAFOVEA_PREPROCESS
+[.rodata] STREAM_YUV420_PERIPHERY_PREPROCESS
+[.rodata] STREAM_YUV420_FULL_POSTPROCESS
+[.rodata] STREAM_YUV420_FOVEA_POSTPROCESS
+[.rodata] STREAM_YUV420_PARAFOVEA_POSTPROCESS
+[.rodata] STREAM_YUV420_PERIPHERY_POSTPROCESS
+[.rodata] STREAM_YUV420_MLD_PREPROCESS
+[.rodata] monotonic
+[.rodata] sensorCaps
+[.rodata] org.codeaurora.qcamera3.sensor_meta_data
+[.rodata] com.qti.sensorbps

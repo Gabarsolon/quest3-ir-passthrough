@@ -32,6 +32,7 @@ Getting at the tracking-camera pixels would mean working inside that HAL on a mo
 |---|---|
 | [docs/camera-inventory.md](docs/camera-inventory.md) | Camera devices, permissions and features reported by a real Quest 3 over `adb` |
 | [docs/firmware-analysis.md](docs/firmware-analysis.md) | The six physical camera sensors, read out of the v79 OTA system image |
+| [docs/reverse-engineering.md](docs/reverse-engineering.md) | Decompiling `libxrcamerahal.so`: why no HAL switch exposes the IR cameras |
 | [docs/passthrough-camera-api.md](docs/passthrough-camera-api.md) | How the official Passthrough Camera API works and why it can't give you IR |
 | [docs/prior-art.md](docs/prior-art.md) | Who has tried this and what they found, with links |
 | [evidence/](evidence/) | Trimmed `dumpsys` output the inventory is based on |
