@@ -2,6 +2,15 @@
 
 Trimmed output from a stock Quest 3 (Horizon OS v79, build `51154110174900520`), collected with read-only `adb` commands. Device serials are left out.
 
+## `vendor/` — from the OTA system image
+
+Files pulled from the `vendor` partition of the v79 OTA (see [../docs/firmware-analysis.md](../docs/firmware-analysis.md)):
+
+- `vendor-camera-files.txt` — the camera/tracking-related file listing from `vendor.img`, including the six `com.qti.sensormodule.*` sensor modules (IMX471 ×2 color, OG01A1B ×2 + OV7251 ×2 monochrome/IR).
+- `cvaectuning_slam.json`, `cvaectuning_ht.json` — Meta's CV auto-exposure tuning for the SLAM and hand-tracking (monochrome) camera paths.
+
+The partition images and `payload.bin` themselves are not committed (they're large and are Meta's firmware); `.gitignore` excludes them.
+
 ## `adb shell dumpsys media.camera` (excerpt)
 
 ```

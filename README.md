@@ -16,7 +16,9 @@ This repo is documentation only. It collects what the headset exposes, what the 
 - Screen-capture tricks (media projection) return the composited RGB passthrough view, so they hit the same limit.
 - On the Quest 3, an IR illuminator **helps tracking** in the dark, but the passthrough view stays black.
 
-Getting at the tracking-camera pixels would mean working below Android, on a modified device. That is invasive, firmware-dependent and outside this repo's scope.
+Analysis of the v79 system image confirms this at the hardware level: the Quest 3 has **six cameras** — two Sony IMX471 **color** sensors (the passthrough cameras, exposed to apps) and four OmniVision **monochrome, IR-sensitive** sensors (OG01A1B + OV7251) used for tracking. The IR-capable cameras exist and work in the dark, but they are owned by Meta's XR camera HAL / tracking pipeline below Android and are never published as Android cameras. See [docs/firmware-analysis.md](docs/firmware-analysis.md).
+
+Getting at the tracking-camera pixels would mean working inside that HAL on a modified device. That is invasive, firmware-dependent and outside this repo's scope.
 
 ## What would change the answer
 
@@ -29,6 +31,7 @@ Getting at the tracking-camera pixels would mean working below Android, on a mod
 | File | What it covers |
 |---|---|
 | [docs/camera-inventory.md](docs/camera-inventory.md) | Camera devices, permissions and features reported by a real Quest 3 over `adb` |
+| [docs/firmware-analysis.md](docs/firmware-analysis.md) | The six physical camera sensors, read out of the v79 OTA system image |
 | [docs/passthrough-camera-api.md](docs/passthrough-camera-api.md) | How the official Passthrough Camera API works and why it can't give you IR |
 | [docs/prior-art.md](docs/prior-art.md) | Who has tried this and what they found, with links |
 | [evidence/](evidence/) | Trimmed `dumpsys` output the inventory is based on |

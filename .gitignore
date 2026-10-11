@@ -4,3 +4,9 @@ build/
 __pycache__/
 *.exe
 *.zip
+
+# Local firmware extraction workspace (large images, not redistributed)
+.venv/
+ota-inspect/
+*.img
+payload.bin
