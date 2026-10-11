@@ -9,6 +9,12 @@ reach the IR tracking cameras inside Meta's XR camera HAL (see
 **Status: temporary root achieved.** No partition was written; nothing survives a
 reboot.
 
+> **Hard constraint: everything here stays temporary.** No partition writes, no
+> persistent root, no flashing, no bootloader unlock. The whole point is that a
+> reboot returns the headset to a clean, stock state, so there is nothing to
+> brick (AVB / anti-rollback make a hard brick unrecoverable). Any step that
+> can't be undone by a reboot is out.
+
 ## Test device
 
 | | |

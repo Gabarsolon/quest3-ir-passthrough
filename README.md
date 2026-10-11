@@ -37,6 +37,7 @@ Getting at the tracking-camera pixels would mean working inside that HAL on a mo
 | [docs/passthrough-camera-api.md](docs/passthrough-camera-api.md) | How the official Passthrough Camera API works and why it can't give you IR |
 | [docs/prior-art.md](docs/prior-art.md) | Who has tried this and what they found, with links |
 | [docs/root-access.md](docs/root-access.md) | Work log: getting a temporary root shell (IonStack / CVE-2026-43499) to reach the tracking-camera HAL |
+| [docs/ir-camera-mapping.md](docs/ir-camera-mapping.md) | Mapping the tracking service's dma-bufs to the physical IR cameras (left/right eye) |
 | [evidence/](evidence/) | Trimmed `dumpsys` output the inventory is based on |
 
 ## Test device
