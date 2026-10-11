@@ -1,0 +1,26 @@
+[.rodata] GL_OES_EGL_image_external
+[.rodata] validateConfiguration
+[.rodata] EXIF_TAG_YCBCR_POSITIONING
+[.rodata] validateCameraId
+[.rodata] %s: caller (pid %d, uid %d) doesn't hold one of these permissions: %s, %s
+[.rodata] getCameraId
+[.rodata] %s: caller (pid %d, uid %d) doesn't hold %s permission which is necessary to create cameraSource PASSTHROUGH or AVATAR. Consider using cameraSource APP_DEFINED
+[.rodata] GL_EXT_YUV_target
+[.rodata] %s: Invalid camera LensFacing %d, APP_DEFINED cameras must set LensFacing to External.
+[.rodata] com.meta.extra_metadata
+[.rodata] , physicalCameraId: 
+[.rodata] camera_source
+[.rodata] aPosition
+[.rodata] Cannot initialize external texture program due to missing GL_EXT_YUV_target extension
+[.rodata] %s: Camera producer is not allowed to set cameraId. Caller (pid %d, uid %d) doesn't hold permission %s
+[.rodata] android.hardware.camera.provider.ICameraProvider
+[.rodata] android.hardware.camera.provider.ICameraProviderCallback
+[.rodata] GL_OES_EGL_image_external_essl3
+[.rodata] android.permission.CREATE_VIRTUAL_DEVICE
+[.rodata] horizonos.permission.CREATE_VIRTUAL_CAMERA
+[.rodata]     in vec4 aPosition;
+[.rodata]       gl_Position = aPosition;
+[.rodata]     #extension GL_EXT_YUV_target : require
+[.rodata]     #extension GL_OES_EGL_image_external_essl3 : require
+[.rodata]   in vec4 aPosition;
+[.rodata]     gl_Position = aPosition;
