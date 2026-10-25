@@ -88,7 +88,7 @@ class ImagePoseTests(unittest.TestCase):
 
         # On image mode's path the buffer accessor has no write operation.
         harness = source[:source.index('static Q now_ms')]
-        for name in ['integer(', 'fail(', 'multiply_quaternion(', 'image_pose_delta(', 'read_native_pose(']:
+        for name in ['integer(', 'fail(', 'multiply_quaternion(', 'image_pose_delta(', 'read_native_pose(', 'begin_image_frame(']:
             harness += function(name)
         harness += r'''
 int _fltused=0;
@@ -115,6 +115,26 @@ void calculate_delta(float *ir,float *native,float *out){
   Source *s=&control.sources[1];int i;float bottom[4];
   for(i=0;i<4;i++){s->camera_pose[i]=ir[i];s->native_pose[i]=s->native_pose[4+i]=native[i];}
   image_pose_delta(s,out,bottom);
+}
+static int frame_tests(void){
+  Source *s=&control.sources[1];
+  int viewport[4]={0,0,4128,2208},scissor[4]={0,0,2064,1104};int i;
+  if(!begin_image_frame(s,viewport,scissor,100))return 30;
+  // Repeated geometry/layers and a long CPU pause do not select a newer capture.
+  for(i=0;i<18;i++)if(begin_image_frame(s,viewport,scissor,100+i))return 31;
+  scissor[1]=1104;
+  for(i=0;i<18;i++)if(begin_image_frame(s,viewport,scissor,120+i))return 32;
+  scissor[1]=0;
+  if(!begin_image_frame(s,viewport,scissor,138)||s->image_frames!=2)return 33;
+  if(begin_image_frame(s,viewport,scissor,138))return 34;
+  // A viewport change starts a new compatible image even without a Y wrap.
+  viewport[2]=4000;
+  if(!begin_image_frame(s,viewport,scissor,139))return 35;
+  // Whole-height fallback: only the idle gap starts another frame.
+  scissor[3]=2208;
+  if(begin_image_frame(s,viewport,scissor,140))return 36;
+  if(!begin_image_frame(s,viewport,scissor,150))return 37;
+  return 0;
 }
 #ifdef _WIN32
 __declspec(dllexport)
@@ -151,7 +171,7 @@ int run_tests(void){
   for(i=0;i<4096;i++)if(saved[i]!=memory_b[i])return 18;
   capacity=4096; control.enabled=1;set_rows(mapped,2,2);
   if(read_native_pose(s)||control.enabled||generic!=73)return 19;
-  return 0;
+  return frame_tests();
 }
 '''
         with tempfile.TemporaryDirectory(prefix='quest-ir-image-test-') as tmp:

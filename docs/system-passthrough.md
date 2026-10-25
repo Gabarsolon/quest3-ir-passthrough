@@ -62,7 +62,11 @@ writing or substituting the runtime uniform buffer. Native eye/menu/depth data
 stay intact. The first 15-second live run and automatic RGB cleanup succeeded;
 a subsequent run held 90Hz display rendering, zero GL/pose errors and about
 58 changed image samples/sec per eye. These counters do not establish visual
-correctness: feedback on motion and rectangles is still pending. The low-resolution
+correctness: the user reported improvement with some remaining tearing. The
+current version latches new captures at the start of each eye/frame, rather than
+allowing the 12ms poll timer to switch images between scanout halves. Its first
+measurement held about 60 changed image samples/sec and 90 latched frames/sec per
+eye, with no GL/pose failures; visual confirmation is pending. The low-resolution
 source still limits image detail. `shadow` and `direct` remain explicit legacy
 diagnostics with known rendering artifacts.
 
@@ -163,7 +167,11 @@ stores unprojected RGB ray slopes. Our shader rotates these rays and applies the
 factory IR Fisheye62 projection. Top/bottom native rows use sign-aligned normalized
 quaternion interpolation. When native camera rows change, our remap can be redrawn
 using the same IR upload; image uploads, remaps and native pose changes have
-separate counters. Uniform offsets, live mapping, range and capacity are checked
+separate counters. New captures are selected at the observed scissor-Y frame wrap
+and held for both scanout halves. Native-row changes between layers reproject the
+latched capture without polling new pixels. Whole-height paths use an idle-gap
+fallback; their app coverage is unverified. `latchedFrames` counts each eye's
+detected frame starts. Uniform offsets, live mapping, range and capacity are checked
 before reading; native buffers are never written or rebound to replacement storage
 by this method. Legacy direct/shadow code remains for diagnostics only.
 

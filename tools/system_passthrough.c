@@ -66,7 +66,9 @@ typedef struct {
   U antialias_texture;
   float range_low, range_scale, native_pose[8];
   U native_valid, remap_dirty;
-  Q last_poll, remaps, native_changes;
+  Q remaps, native_changes, image_frames, last_draw_ms;
+  U frame_seen;
+  int frame_y, frame_viewport[4];
 } Source;
 
 typedef struct {
@@ -183,6 +185,8 @@ void stats(Q *out) {
   out[20] = control.sources[0].remaps; out[21] = control.sources[1].remaps;
   out[22] = control.sources[0].native_changes;
   out[23] = control.sources[1].native_changes;
+  out[24] = control.sources[0].image_frames;
+  out[25] = control.sources[1].image_frames;
 }
 
 static int integer(U key) { int value; glGetIntegerv(key, &value); return value; }
@@ -451,6 +455,25 @@ static int read_native_pose(Source *source) {
   return 1;
 }
 
+/* The validated runtime draws each eye in two scanout halves. Latch a new IR
+ * capture when scissor Y wraps to the first half, then keep it for every strip
+ * and layer in that eye/frame. A whole-height draw path has no Y wrap; its idle
+ * gap is the fallback boundary. A pause within a split frame is not a boundary. */
+static int begin_image_frame(Source *source, const int *viewport,
+    const int *scissor, Q now) {
+  int i, changed = 0;
+  for (i = 0; i < 4; i++) if (source->frame_viewport[i] != viewport[i]) changed = 1;
+  int whole_height = scissor[3] >= viewport[3];
+  int begin = !source->frame_seen || changed || scissor[1] < source->frame_y ||
+      (whole_height && now - source->last_draw_ms >= 4);
+  source->frame_seen = 1;
+  source->frame_y = scissor[1];
+  source->last_draw_ms = now;
+  for (i = 0; i < 4; i++) source->frame_viewport[i] = viewport[i];
+  if (begin) source->image_frames++;
+  return begin;
+}
+
 static const int camera_offsets[14] = {
   2912,2916,2920,2924,2928,2932,2936,
   2944,2948,2952,2956,2960,2964,2968
@@ -627,10 +650,11 @@ void on_enter(GumInvocationContext *ic) {
   if (control.swap_eyes) eye = 1 - eye;
   Source *source = &control.sources[eye];
   if (control.tracker && control.pose_method == POSE_IMAGE) {
+    int begin = begin_image_frame(source, viewport, scissor, now);
     if (!read_native_pose(source)) return;
-    int poll = now - source->last_poll >= 12;
-    if (poll || source->remap_dirty) refresh(eye, poll);
-    if (poll) source->last_poll = now;
+    /* Native row rotations can still change between layers. Correct that
+     * projection using the latched IR capture, without polling a newer image. */
+    if (begin || source->remap_dirty) refresh(eye, begin);
   } else if (now - control.last_refresh >= 12) { refresh(-1, 1); control.last_refresh = now; }
   if (!control.enabled || !source->valid) return;
   if (control.tracker) {

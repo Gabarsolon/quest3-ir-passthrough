@@ -14,8 +14,9 @@ tracking in normal Quest passthrough. The current hands-mode pipeline has measur
 about 60 changed IR images/sec per eye. Earlier pose-buffer methods initially
 looked smooth but later produced recurring black rectangles in the room and menu.
 The replacement `--pose-method image` is now the default: it corrects our IR
-image while preserving native camera and menu poses. It has passed a live
-rendering/cleanup check; visual validation is pending. Source resolution remains
+image while preserving native camera and menu poses. The user reported improvement
+with some remaining tearing. The latest change holds each IR capture across a
+whole eye/frame; visual validation is pending. Source resolution remains
 640x512. Optional monochrome
 Snapdragon GSR1 reconstruction improved edges while keeping motion smooth.
 Linear filtering is the default, with extra anti-aliasing off. Select

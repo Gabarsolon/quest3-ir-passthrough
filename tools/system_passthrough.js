@@ -275,16 +275,17 @@ if (OPTIONS.poseCorrection) {
     }
     api.pose(poseTracker, extrinsics, OPTIONS.poseAgeMs, sources[0].stamp, sources[1].stamp);
 }
-const statsBuffer = Memory.alloc(24 * 8);
+const statsBuffer = Memory.alloc(26 * 8);
 function stats() {
     api.stats(statsBuffer);
-    const values = Array.from({length: 24}, (_, i) => Number(statsBuffer.add(i * 8).readU64()));
+    const values = Array.from({length: 26}, (_, i) => Number(statsBuffer.add(i * 8).readU64()));
     return {strategy: 'owned-yuv-native', sourceSize: [640, 512], outputSize: OPTIONS.outputSize, irDelayMs,
         enabled: !!values[0], ready: !!values[1],
         cleaned: !!values[2], errors: values[3], substitutedDraws: values[4],
         poseCorrection: !!OPTIONS.poseCorrection, poseMethod: OPTIONS.poseMethod, poseCorrectedDraws: values[15],
         poseSamples: values[16], poseFailures: values[17], poseAgeMs: values[18],
         imageRemaps: values.slice(20, 22), nativePoseChanges: values.slice(22, 24),
+        latchedFrames: values.slice(24, 26),
         filter: filterModes[values[19]], sgsrSharpness: OPTIONS.sgsrSharpness, antialiasing: OPTIONS.antialiasing,
         refreshes: values[5], lastSubstitution: values[6], sources: sources.map((s, i) =>
             ({eye: s.eye, uploads: values[7 + i], sequence: values[9 + i],
