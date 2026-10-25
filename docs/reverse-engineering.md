@@ -1,5 +1,9 @@
 # Reverse engineering `libxrcamerahal.so`
 
+This records the early search for an app-facing IR switch on the tested v79
+build. Rooted IR passthrough was implemented afterward; see
+[system passthrough](system-passthrough.md) and [capture resolution](ir-resolution.md).
+
 Follow-up to [firmware-analysis.md](firmware-analysis.md). After confirming the six sensors, the next question was whether the XR camera HAL — the component that actually drives all six — has any switch that would expose the IR (monochrome) cameras to apps, or route their frames into passthrough. It does not. This is what the code shows.
 
 ## Method
@@ -66,4 +70,10 @@ The HAL confirms the lock rather than opening it:
 - Nothing in the HAL exposes mono as an Android camera or merges it into passthrough.
 - The app-visible camera set is fixed above this HAL and contains only the two color sensors.
 
-Turning the IR cameras into a usable night-vision view would therefore mean injecting into Meta's XR camera HAL on a modified/rooted headset **and** building a separate display path for the result — not a property toggle, not an app, and not portable. That is the real boundary, and it is consistent with the firmware, the `adb` camera inventory, and every external report. This repo stops here.
+The later implementation uses temporary root to read the existing tracking-camera
+DMA buffers and an in-memory compositor hook to substitute owned IR textures.
+It does not turn a mono camera into an Android Camera2 device. The current
+implementation and its limitations are in [system passthrough](system-passthrough.md).
+The later [resolution investigation](ir-resolution.md) additionally inspected
+`getMaxStreamResolution`, `getMatchingStreamResolution`, and the live native
+configuration objects; the existing front-IR modes stop at 640x513 RAW.

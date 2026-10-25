@@ -1,5 +1,11 @@
 # RAM-only system passthrough replacement
 
+Preferred tested launch: `python tools/system_passthrough.py --display-refresh 120`.
+This selects about 60 new IR images/sec with a 120 Hz display request; the user
+called it the best version so far after confirming tearing was gone. The
+640x512 source is unchanged. The full-resolution investigation is documented in
+[IR capture resolution](ir-resolution.md).
+
 `tools/system_passthrough.py` substitutes live stereo IR for the camera textures
 sampled by the Quest system compositor. The user confirmed IR in normal system
 passthrough, upright orientation, stereo, corrected proportions, removal of
@@ -19,7 +25,7 @@ can terminate the temporary su daemon. The saved root payload requires Wi-Fi off
 during exploitation; enable Wi-Fi after successful root recovery.
 
 ```powershell
-python C:\Users\remus\quest3-ir-passthrough\tools\system_passthrough.py
+python C:\Users\remus\quest3-ir-passthrough\tools\system_passthrough.py --display-refresh 120
 ```
 
 Enable normal Quest passthrough and leave the command running. `IR ACTIVE` means
@@ -35,7 +41,8 @@ python C:\Users\remus\quest3-ir-passthrough\tools\system_passthrough.py --status
 `--frequency auto` preserves the lighting-frequency decision and `--frequency 50`
 selects the earlier 50 Hz behavior temporarily. `--output-size 1280x960` is the
 default GPU remap size; `640x512` and `2328x1748` are also available. This output
-size does not change the 640x512 camera source. `--no-fast-mode` preserves the original camera
+size does not change the 640x512 camera source. It does not select a larger sensor mode; see
+[the native HAL and module audit](ir-resolution.md). `--no-fast-mode` preserves the original camera
 schedule. `--no-calibration` selects the earlier rotated/cropped view, with
 `--rotate 0|90|180|270` (default 90), `--mirror`, and `--stretch` available for that
 fallback. `--zoom`, `--swap-eyes`, and `--no-normalize` are also available.

@@ -1,5 +1,10 @@
 # IR tracking-camera frame-buffer mapping
 
+The PID/fd numbers below are historical examples. Rediscover them each boot.
+The maintained launcher performs fresh discovery; see
+[system passthrough](system-passthrough.md). Sensor calibration size, HAL mode
+size and exported DMA image size are compared in [the resolution audit](ir-resolution.md).
+
 Work log: identifying which dma-bufs held by the tracking service correspond to which physical IR camera. Collected on the test Quest 3 (v79, build `51154110174900520`) with the temporary root shell from [root-access.md](root-access.md). **Read-only**: nothing on the headset was modified; the mapping is volatile and disappears on reboot.
 
 ## Background

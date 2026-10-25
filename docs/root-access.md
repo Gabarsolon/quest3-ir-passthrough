@@ -1,20 +1,19 @@
 # Root access on the Quest 3 (work log)
 
-The rest of this repo is read-only research. This document is the exception: it
-records the effort to get a root shell on the headset, which is the only way to
-reach the IR tracking cameras inside Meta's XR camera HAL (see
-[reverse-engineering.md](reverse-engineering.md) and
-[firmware-analysis.md](firmware-analysis.md)).
+This records temporary-root recovery used to reach the IR tracking-camera
+buffers. The project now also includes RAM-only readers and compositor hooks;
+[system passthrough](system-passthrough.md) describes that implementation.
+The examples below are chronological recovery notes, not instructions to rerun
+an exploit whenever IR needs restarting. The launcher checks existing root first.
 
 **Status: temporary root achieved.** Root and runtime patches are cleared by a
 reboot. Helper files in `/data/local/tmp` survive; boot and system partitions
 were not modified.
 
-> **Hard constraint: everything here stays temporary.** No partition writes, no
-> persistent root, no flashing, no bootloader unlock. The whole point is that a
-> reboot returns the headset to a clean, stock state, so there is nothing to
-> brick (AVB / anti-rollback make a hard brick unrecoverable). Any step that
-> can't be undone by a reboot is out.
+> **Hard constraint: runtime changes stay temporary.** No firmware/partition
+> writes, persistent root, flashing, or bootloader unlock. New experiment binaries,
+> frames and device logs stay in `/dev/quest3-ir-session` tmpfs. Existing
+> `/data/local/tmp` helpers survive reboot; root and RAM hooks do not.
 
 ## Test device
 
@@ -109,7 +108,7 @@ Left on `/data/local/tmp` (helper files survive reboot; root must be restored):
 - From the earlier DirtyFrag attempt: `dfpoison`, `inject.spec`, `libas.spec`,
   `e2e.dex`, `cve_test32`.
 
-Wi-Fi is currently still disabled from the successful run; re-enable with
+At that point Wi-Fi was still disabled from the successful run; re-enable with
 `adb shell svc wifi enable`.
 
 ## Why this matters here

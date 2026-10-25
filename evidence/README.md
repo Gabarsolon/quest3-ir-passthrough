@@ -1,6 +1,18 @@
 # Evidence
 
-Trimmed output from a stock Quest 3 (Horizon OS v79, build `51154110174900520`), collected with read-only `adb` commands. Device serials are left out.
+Observations from Quest 3 build `51154110174900520` (Horizon OS v79). Earlier
+inventory uses read-only ADB; later camera metadata inspection uses temporary
+root and bounded read-only native probes. Device serials and camera images are
+not included in the resolution evidence.
+
+## IR resolution audit
+
+[ir-resolution-2026-10-25.json](ir-resolution-2026-10-25.json) records live RAW
+capabilities, configured streams, and host-decoded sensor-module dimensions and
+hashes. No full-resolution IR stream was found. See
+[the investigation](../docs/ir-resolution.md). The proprietary module binaries
+are not committed; the offline inspector is in
+[tools/inspect_sensor_module.py](../tools/inspect_sensor_module.py).
 
 ## `vendor/` — from the OTA system image
 

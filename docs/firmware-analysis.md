@@ -1,5 +1,10 @@
 # Firmware analysis: the six cameras, from the OTA
 
+This is the v79 hardware/API investigation. The project now implements rooted,
+RAM-only system IR passthrough; see [the maintained guide](system-passthrough.md).
+The sensor specification and an available capture stream are different; see
+[the resolution audit](ir-resolution.md).
+
 This is what the Quest 3 system image says about its own cameras. It confirms, at the hardware level, why apps only ever see two RGB cameras.
 
 ## Source
@@ -42,16 +47,18 @@ The mono sensors are driven and consumed by Meta's XR camera stack, not the Andr
 
 The mono camera frames never reach Android's `CameraManager`. That is why no Camera2 id, and no Passthrough Camera API `camera_source` value, corresponds to them.
 
-## Bottom line
+## Access boundary and implemented follow-up
 
-The firmware doesn't reveal a hidden door. It confirms the lock:
+The firmware lists real IR-sensitive cameras owned by the XR tracking stack.
+They are not published through the stock Android camera provider on this build.
+That explains why the public RGB camera API cannot select them.
 
-- The IR-capable sensors are real (OG01A1B, OV7251) and the headset reads them continuously for tracking.
-- They are owned by the XR camera HAL / tracking pipeline below Android, with CV-specific tuning, and are deliberately not exposed as Android cameras.
-- The only cameras an app can open are the two IMX471 color sensors, which can't see IR.
+The project subsequently read their exported DMA buffers with temporary root
+and substituted owned IR textures in the system compositor. This route is
+implemented in [system passthrough](system-passthrough.md); the earlier conclusion
+that further work was out of scope no longer describes this repository.
 
-So there is no app-level route to IR night vision. Reaching the mono frames would mean operating inside Meta's XR camera HAL (`libxrcamerahal.so` / `libmonocameracontrol.so`) on a modified device — a privileged, system-level surface, not an API. That is the realistic boundary, and it matches what every external report has found.
-
-## If someone wanted to go further (not done here)
-
-The honest next step would be static analysis of `libxrcamerahal.so` and `libmonocameracontrol.so` to see how the mono streams are published internally and whether any system service re-exposes them. That is reverse engineering of a privileged component on your own device; it would not produce a portable app and is out of scope for this repo.
+The full-resolution follow-up found factory calibration at 1280x1024, but the
+live front-IR RAW configuration and shipped module each provide a single
+640x513 mode. The reader receives a 640x512 image. A 1280x1024 live IR stream
+has not been accessed. See [the audit and evidence](ir-resolution.md).

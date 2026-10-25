@@ -1,0 +1,300 @@
+{
+  "build": "51154110174900520",
+  "date": "2026-10-25",
+  "method": "Read current native configuration objects during normal buffer accounting; inspect sensor module files offline. No camera reconfiguration.",
+  "cameraHalSha256": "da7096e07eedea3124adbcc85207324ed345b094eb397133cd4a66d177260dae",
+  "cameras": [
+    {
+      "cameraId": 0,
+      "isBayer": false,
+      "rawCapabilities": [
+        {
+          "halFormat": 36,
+          "width": 640,
+          "height": 513,
+          "input": 0,
+          "formatName": "RAW_OPAQUE"
+        },
+        {
+          "halFormat": 37,
+          "width": 640,
+          "height": 513,
+          "input": 0,
+          "formatName": "RAW10"
+        },
+        {
+          "halFormat": 32,
+          "width": 640,
+          "height": 513,
+          "input": 0,
+          "formatName": "RAW16"
+        },
+        {
+          "halFormat": 38,
+          "width": 640,
+          "height": 513,
+          "input": 0,
+          "formatName": "RAW12"
+        },
+        {
+          "halFormat": 291,
+          "width": 640,
+          "height": 513,
+          "input": 0,
+          "formatName": "vendor-0x123"
+        }
+      ],
+      "configured": [
+        {
+          "pipeline": 0,
+          "width": 640,
+          "height": 513,
+          "pixelFormat": 7,
+          "buffers": 4
+        }
+      ],
+      "fullResolution1280x1024Advertised": false
+    },
+    {
+      "cameraId": 1,
+      "isBayer": false,
+      "rawCapabilities": [
+        {
+          "halFormat": 36,
+          "width": 640,
+          "height": 513,
+          "input": 0,
+          "formatName": "RAW_OPAQUE"
+        },
+        {
+          "halFormat": 37,
+          "width": 640,
+          "height": 513,
+          "input": 0,
+          "formatName": "RAW10"
+        },
+        {
+          "halFormat": 32,
+          "width": 640,
+          "height": 513,
+          "input": 0,
+          "formatName": "RAW16"
+        },
+        {
+          "halFormat": 38,
+          "width": 640,
+          "height": 513,
+          "input": 0,
+          "formatName": "RAW12"
+        },
+        {
+          "halFormat": 291,
+          "width": 640,
+          "height": 513,
+          "input": 0,
+          "formatName": "vendor-0x123"
+        }
+      ],
+      "configured": [
+        {
+          "pipeline": 0,
+          "width": 640,
+          "height": 513,
+          "pixelFormat": 7,
+          "buffers": 4
+        }
+      ],
+      "fullResolution1280x1024Advertised": false
+    },
+    {
+      "cameraId": 2,
+      "isBayer": false,
+      "rawCapabilities": [
+        {
+          "halFormat": 291,
+          "width": 640,
+          "height": 481,
+          "input": 0,
+          "formatName": "vendor-0x123"
+        },
+        {
+          "halFormat": 36,
+          "width": 640,
+          "height": 481,
+          "input": 0,
+          "formatName": "RAW_OPAQUE"
+        },
+        {
+          "halFormat": 37,
+          "width": 640,
+          "height": 481,
+          "input": 0,
+          "formatName": "RAW10"
+        },
+        {
+          "halFormat": 38,
+          "width": 640,
+          "height": 481,
+          "input": 0,
+          "formatName": "RAW12"
+        },
+        {
+          "halFormat": 32,
+          "width": 640,
+          "height": 481,
+          "input": 0,
+          "formatName": "RAW16"
+        }
+      ],
+      "configured": [
+        {
+          "pipeline": 0,
+          "width": 640,
+          "height": 481,
+          "pixelFormat": 7,
+          "buffers": 4
+        }
+      ],
+      "fullResolution1280x1024Advertised": false
+    },
+    {
+      "cameraId": 3,
+      "isBayer": false,
+      "rawCapabilities": [
+        {
+          "halFormat": 291,
+          "width": 640,
+          "height": 481,
+          "input": 0,
+          "formatName": "vendor-0x123"
+        },
+        {
+          "halFormat": 36,
+          "width": 640,
+          "height": 481,
+          "input": 0,
+          "formatName": "RAW_OPAQUE"
+        },
+        {
+          "halFormat": 37,
+          "width": 640,
+          "height": 481,
+          "input": 0,
+          "formatName": "RAW10"
+        },
+        {
+          "halFormat": 38,
+          "width": 640,
+          "height": 481,
+          "input": 0,
+          "formatName": "RAW12"
+        },
+        {
+          "halFormat": 32,
+          "width": 640,
+          "height": 481,
+          "input": 0,
+          "formatName": "RAW16"
+        }
+      ],
+      "configured": [
+        {
+          "pipeline": 0,
+          "width": 640,
+          "height": 481,
+          "pixelFormat": 7,
+          "buffers": 4
+        }
+      ],
+      "fullResolution1280x1024Advertised": false
+    }
+  ],
+  "sensorModules": [
+    {
+      "devicePath": "/vendor/etc/camera/com.qti.sensormodule.cam00_none_eureka_og01a1b_left_csi4.bin",
+      "sha256": "f8e72f3db6a3a4ee37d3e1e8898be067f4a2bf9327b511195de57160985938de",
+      "parser": "Parameter Parser V3.4.0 (2106301010)",
+      "declaredResolutionCount": 1,
+      "modes": [
+        {
+          "modeIndex": 0,
+          "streams": [
+            {
+              "width": 640,
+              "height": 513,
+              "csiDataType": 43,
+              "bitsPerPixel": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "devicePath": "/vendor/etc/camera/com.qti.sensormodule.cam01_none_eureka_og01a1b_right_csi1.bin",
+      "sha256": "4480983878872f982c86a8ce8901bac978f974f3c83a443bc45045e5b5dfd734",
+      "parser": "Parameter Parser V3.4.0 (2106301010)",
+      "declaredResolutionCount": 1,
+      "modes": [
+        {
+          "modeIndex": 0,
+          "streams": [
+            {
+              "width": 640,
+              "height": 513,
+              "csiDataType": 43,
+              "bitsPerPixel": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "devicePath": "/vendor/etc/camera/com.qti.sensormodule.cam02_liteon_eureka_ov7251_left_csi5.bin",
+      "sha256": "9dfcf92586c821fcb65eaaff58cbe7d4c57cc33e26f5952e2b11a1d092d6be39",
+      "parser": "Parameter Parser V3.4.0 (2106301010)",
+      "declaredResolutionCount": 1,
+      "modes": [
+        {
+          "modeIndex": 0,
+          "streams": [
+            {
+              "width": 640,
+              "height": 481,
+              "csiDataType": 43,
+              "bitsPerPixel": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "devicePath": "/vendor/etc/camera/com.qti.sensormodule.cam03_liteon_eureka_ov7251_right_csi2.bin",
+      "sha256": "66d628c4c642a47510cd33f73d61d18761798a427544e44ec9366f840959ff1a",
+      "parser": "Parameter Parser V3.4.0 (2106301010)",
+      "declaredResolutionCount": 1,
+      "modes": [
+        {
+          "modeIndex": 0,
+          "streams": [
+            {
+              "width": 640,
+              "height": 481,
+              "csiDataType": 43,
+              "bitsPerPixel": 10
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "activeInputSize": [
+    640,
+    512
+  ],
+  "activeRemapSize": [
+    1280,
+    960
+  ],
+  "controllerErrorsAfterProbe": 0,
+  "conclusion": "No existing full-resolution IR stream was found. Only one declared mode per monochrome module; world-camera RAW capabilities are 640x513. The exported image remains 640x512. This does not establish hardware impossibility."
+}

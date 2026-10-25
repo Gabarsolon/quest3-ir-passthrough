@@ -1,17 +1,16 @@
 # Injecting a background layer into Virtual Desktop (OpenXR composition)
 
-Work log for the current approach to the repo's question: instead of trying to
-make the system passthrough show IR, take over the **XR composition layer** that
-sits *behind* the Virtual Desktop image and draw our own content there — with the
-goal of eventually drawing the IR tracking-camera feed.
+Historical Virtual Desktop layer-injection experiment. This is no longer the
+maintained launch path: the project now replaces the shared system passthrough
+textures directly, and does not require VD. See
+[system passthrough](system-passthrough.md) for the working route.
 
-Status: **working prototype of the injection**. We can render our own layer
-behind the VD desktop without breaking VD. Feeding the IR cameras in is the next
-step.
+The notes below record the earlier injection prototype and its then-pending
+IR integration. They do not describe the current launcher status.
 
 ## Why this route
 
-- System passthrough is owned by Meta and cannot be switched to IR
+- At this stage there was no implemented system IR replacement or public selector
   (see [firmware-analysis.md](firmware-analysis.md), [camera-provider.md](camera-provider.md)).
 - Virtual Desktop renders its screen as XR composition layers. If we can add our
   own layer *below* VD's desktop and *above* its passthrough layer, anything we

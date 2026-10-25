@@ -1,5 +1,9 @@
 # Camera inventory of a stock Quest 3
 
+Scope: public API observations from the tested Horizon OS v79 build
+51154110174900520, rather than a claim about every later SDK/OS version.
+The rooted [system IR prototype](system-passthrough.md) runs below this API.
+
 Collected over `adb` from a Quest 3 on Horizon OS v79 (build `51154110174900520`). Commands used:
 
 ```sh

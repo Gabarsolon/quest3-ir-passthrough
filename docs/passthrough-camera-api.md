@@ -1,5 +1,9 @@
 # How the Passthrough Camera API works
 
+Scope: public API observations from the tested Horizon OS v79 build
+51154110174900520, rather than a claim about every later SDK/OS version.
+The rooted [system IR prototype](system-passthrough.md) runs below this API.
+
 Meta's **Passthrough Camera API** (PCA) gives apps the camera frames behind passthrough. It shipped as an experimental feature in Horizon OS **v74**. Since Meta XR Core SDK **v76** it can be used in Store apps. It works on the Quest 3 and Quest 3S.
 
 ## It is Android Camera2 underneath

@@ -1,5 +1,9 @@
 # The camera provider: how app visibility is gated
 
+Snapshot of the app-facing provider on build 51154110174900520. This describes
+the public API boundary; it does not rule out the rooted
+[system compositor implementation](system-passthrough.md).
+
 Final layer. [reverse-engineering.md](reverse-engineering.md) showed the mono (IR) frames are locked below Android. This shows the layer *above* — the one that decides which cameras an app can see and open — and confirms it has no concept of the IR cameras at all.
 
 ## It's AOSP's Virtual Camera, reused by Meta
@@ -42,16 +46,18 @@ Every service method — `registerCamera`, `unregisterCamera`, `getCameraId`, `g
 
 A registered camera is a **producer→consumer** pipe: the registrant supplies frames as GL textures (the service requires `GL_OES_EGL_image_external`, `..._essl3`, `GL_EXT_YUV_target`). The passthrough cameras exist because a privileged Meta component (holding `CREATE_VIRTUAL_DEVICE` — the CMS headset service, `system_ext/.../libcmsservice-headset.so` + `CMSHeadset.apk`) registered them as `cameraSource = PASSTHROUGH` and feeds them color frames from the passthrough pipeline. An ordinary app then *opens* them (read side), gated separately by `horizonos.permission.HEADSET_CAMERA` (see [passthrough-camera-api.md](passthrough-camera-api.md)).
 
-## Why this closes the IR question
+## Why this provider does not supply tracking-camera pixels
 
-The enum that defines every camera an app can see has exactly three values — **PASSTHROUGH, AVATAR, APP_DEFINED**. There is no "tracking", "mono", or "IR" source. The framework that publishes cameras to the Android camera service literally cannot represent the IR tracking cameras.
+There is no enum value that asks this provider to open a tracking sensor. Opening
+an existing PASSTHROUGH camera gives the RGB feed on the tested build.
+APP_DEFINED describes frames supplied by a producer; it does not obtain those
+frames from an otherwise inaccessible camera.
 
-The only two things an app can do here are both dead ends for night vision:
-
-1. **Register an APP_DEFINED camera** — but then the *app* is the producer; it supplies the frames. It cannot name a real sensor, and it has no way to get mono/IR pixels to feed in (those are locked below Android, per [reverse-engineering.md](reverse-engineering.md)).
-2. **Open the existing PASSTHROUGH cameras** — color only, can't see IR.
-
-Registering a *new* PASSTHROUGH-type camera needs `CREATE_VIRTUAL_DEVICE` (a privileged system permission) **and** you'd still have to be the one feeding it frames — which again requires the mono frames you can't obtain. Every path loops back to the same locked door.
+A producer that already has privileged access to IR frames could supply a custom
+feed. The enum does not make that abstract representation impossible. It simply
+does not provide the missing hardware access. This project's current route reads
+IR below Android using temporary root and replaces textures in the system
+compositor, without registering a new virtual camera.
 
 ## Full chain, end to end
 
@@ -60,4 +66,6 @@ Registering a *new* PASSTHROUGH-type camera needs `CREATE_VIRTUAL_DEVICE` (a pri
 3. **Virtual Camera provider** (`/system/bin/virtual_camera`) publishes cameras to apps with `cameraSource` ∈ {PASSTHROUGH, AVATAR, APP_DEFINED} — no IR source, PASSTHROUGH gated by `CREATE_VIRTUAL_DEVICE`.
 4. **Apps** open PASSTHROUGH (color, via `HEADSET_CAMERA`) — the only headset camera data they can get, and it can't see IR.
 
-There is no supported or firmware-level path from an IR illuminator to a visible passthrough image on the Quest 3. The repo ends here.
+There is no stock app-level selector for the IR cameras in this provider on the
+tested build. Rooted RAM-only passthrough is now implemented separately; see
+[system passthrough](system-passthrough.md).

@@ -1,113 +1,124 @@
 # quest3-ir-passthrough
 
-Research notes on one question: **can a Meta Quest 3 show passthrough from its infrared-sensitive tracking cameras, so the room is visible at night under an IR illuminator?**
+Replace Quest 3 system RGB passthrough with a live stereo feed from its
+infrared-sensitive tracking cameras. With an IR illuminator, this provides a
+monochrome view of the room in the dark.
 
-The PSVR2 does this out of the box: its passthrough comes from monochrome cameras that see near-infrared, so an IR lamp lights the room for the headset while it stays dark to your eyes. The Quest 3 doesn't. Its passthrough comes from the two RGB cameras, so at night the view is black even with an IR illuminator running.
+This is a **firmware-specific prototype using temporary root and RAM hooks**.
+It runs in the shared system compositor; Virtual Desktop is not required.
+Normal system passthrough has been visually tested. Other applications and
+rendering layouts still need individual validation.
 
-This repo is documentation plus the small tools we used. It collects what the headset exposes, what the official APIs allow, what other people have tried, and the code that reads the tracking-camera frames and displays them live.
+## Current result
 
-## RAM-only system replacement (rooted v79 prototype)
+The user confirmed upright stereo IR, corrected proportions, aligned hands,
+and removal of the recurring rectangles/tearing in the latest tested setup.
+They called the current configuration the best version so far. Earlier motion
+lag reports remain relevant; this is not a claim of perfect motion in every scene.
 
-The current prototype replaces the system compositor's RGB passthrough camera
-textures with live stereo IR. The user confirmed upright stereo IR, corrected proportions, and aligned hand
-tracking in normal Quest passthrough. The current hands-mode pipeline has measured
-about 60 changed IR images/sec per eye. Earlier pose-buffer methods initially
-looked smooth but later produced recurring black rectangles in the room and menu.
-The replacement `--pose-method image` is now the default: it corrects our IR
-image while preserving native camera and menu poses. Holding each IR capture
-across a whole eye/frame cleared the remaining tearing in the user's test
-("seems perfect now"). Follow-up comparison reported moving-object trailing or
-stutter versus the earlier direct method; cadence/reprojection analysis continues
-in the session notes. Source resolution remains
-640x512. Optional monochrome
-Snapdragon GSR1 reconstruction improved edges while keeping motion smooth.
-Linear filtering is the default, with extra anti-aliasing off. Select
-`--filter cubic` or `--filter sgsr` for an individual run; the final tested
-enhancement combination is `--filter sgsr --sgsr-sharpness 1.0 --aa edge`.
-These options are not saved to the headset or remembered by later launches.
-It uses temporary root and an in-memory hook; Virtual Desktop is
-not required. Run it from PowerShell with the headset connected and temporary
-root already active:
+| Stage | Verified size / rate on the tested headset |
+|---|---|
+| Factory calibration for the front IR pair | 1280×1024 coordinates |
+| Image input actually read by this project | **640×512 per eye, about 60 distinct images/sec** |
+| Owned, calibrated remap texture | 1280×960 per eye; larger output does not add captured detail |
+| Preferred tested display timing | **120 Hz**, selected with `--display-refresh 120` |
+
+The OG01A1B sensor is rated for 1280×1024/120 FPS, but that is a hardware
+specification, not an unlocked Quest mode. The live HAL and the shipped sensor
+module currently expose only a 640×513 RAW mode for this pair; the exported
+image is 640×512. **No existing full-resolution IR stream was found.** See the
+[resolution investigation](docs/ir-resolution.md) and
+[recorded evidence](evidence/ir-resolution-2026-10-25.json).
+
+The default `--pose-method image` corrects our IR pixels while leaving native
+camera/menu uniform buffers untouched. Each eye holds one IR capture across its
+rendered frame. Legacy `direct` and `shadow` methods produced recurring artifacts
+and remain diagnostic options.
+
+## Run
+
+Requirements: Quest 3 on build **51154110174900520** (Horizon OS v79), active
+temporary root, an authorized ADB connection, Python with NumPy and
+`frida==17.17.0`, and LLVM clang. Temporary root must already be established;
+the passthrough launcher does not run the exploit.
+
+From the repository in PowerShell, launch the preferred tested configuration:
 
 ```powershell
-python C:\Users\remus\quest3-ir-passthrough\tools\system_passthrough.py
+python .\tools\system_passthrough.py --display-refresh 120
 ```
 
-Ctrl+C restores RGB. A second terminal can run the same command with `--stop` or
-`--status`. New headset files stay in tmpfs. See
-[system passthrough](docs/system-passthrough.md) for setup, validation, and current
-geometry/app-coverage limits.
-
-For the frame-latched image method with more even 60 Hz IR pacing, try
-`--display-refresh 120`. This temporarily requests a 120 Hz display and restores
-the prior override on normal stop or startup failure. It does not increase camera
-capture rate. The user confirmed this combination clears tearing, but motion
-still feels laggy. The older direct version also reproduced tearing on a later run.
-
-To push committed changes, make this repository public and publish the
-`v0.1.0-preview.1` prerelease, run in a normal PowerShell terminal:
+Enable normal system passthrough. `IR ACTIVE` means the compositor has sampled
+the replacement textures. Keep the command running. Ctrl+C restores RGB;
+a second terminal can inspect or stop it:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\publish_github.ps1
+python .\tools\system_passthrough.py --status
+python .\tools\system_passthrough.py --stop
 ```
 
-The script offers browser login if needed, verifies the remote history and tag,
-and reuses an already published matching release. `-DryRun` checks the local
-plan without network access. It does not access the headset.
+Wireless ADB uses `QUEST3_ADB_SERIAL`, then the host file
+`%LOCALAPPDATA%/quest3-ir/adb-target.txt`, then the USB serial.
+Use `--serial IP:PORT` to select a target explicitly. Disconnecting USB alone
+does not remove detached temporary root; the controller still needs its wireless
+connection for IR. Reboot or power loss clears root and RAM hooks.
 
-## Public API background (unrooted headset)
+## Options and cleanup
 
-**No supported route exists.**
+- **Display:** `--display-refresh 120` improves frame spacing for the 60 Hz IR
+  input. It changes display timing, not camera capture rate. Omit it to preserve
+  native display settings. The exact prior override is restored on normal stop
+  or startup failure; after a forced host termination or lost connection, reboot
+  clears the nonpersistent override.
+- **Filtering:** linear is the default, with AA off. `--filter cubic` and
+  `--filter sgsr` are optional for each run. The previously accepted enhancement
+  combination was `--filter sgsr --sgsr-sharpness 1.0 --aa edge`; it has not been
+  revalidated with every later rendering change. Options are not remembered.
+- **Resolution:** `--output-size` changes the remap texture, not the camera
+  input. It cannot select a 1280×1024 capture stream.
+- **RAM scope:** new headset binaries, frames, and logs stay in tmpfs under
+  `/dev/quest3-ir-session`. No firmware flashing, bootloader unlock, persistent
+  root, or boot/system/vendor/odm partition writes are performed. Existing
+  `/data/local/tmp` root helpers survive reboot.
 
-- Android apps on the Quest 3 can open exactly three camera devices: the left and right **RGB** passthrough cameras (ids `50`, `51`) and a virtual avatar camera (id `1`). See [docs/camera-inventory.md](docs/camera-inventory.md).
-- The monochrome tracking cameras, which do see IR, are **not Android camera devices**. The tracking stack uses them internally and no public API returns their pixels.
-- Meta's **Passthrough Camera API** is a thin layer over Android Camera2 and covers only the RGB cameras. See [docs/passthrough-camera-api.md](docs/passthrough-camera-api.md).
-- Screen-capture tricks (media projection) return the composited RGB passthrough view, so they hit the same limit.
-- On the Quest 3, an IR illuminator **helps tracking** in the dark, but the passthrough view stays black.
+See [system passthrough](docs/system-passthrough.md) for recovery, timing
+measurements, and the current geometry/translation limits.
 
-Analysis of the v79 system image confirms this at the hardware level: the Quest 3 has **six cameras** — two Sony IMX471 **color** sensors (the passthrough cameras, exposed to apps) and four OmniVision **monochrome, IR-sensitive** sensors (OG01A1B + OV7251) used for tracking. The IR-capable cameras exist and work in the dark, but they are owned by Meta's XR camera HAL / tracking pipeline below Android and are never published as Android cameras. See [docs/firmware-analysis.md](docs/firmware-analysis.md).
+## Documentation and evidence
 
-The tools in this repository now read those buffers under temporary root and
-perform the substitution in the shared compositor. Older research documents
-describe the earlier public-API investigation; their statements that this work
-stops at that boundary are historical.
-
-## What would change the answer
-
-- Meta exposes the tracking cameras through the Passthrough Camera API, for example as another `camera_source` value. Nothing announced so far.
-- Meta adds a low-light or IR passthrough mode at the system level.
-- A different headset whose passthrough cameras see IR. The PSVR2 (see PSVR2Toolkit Room View) and the Quest 1/2 work this way.
-
-## Contents
-
-| File | What it covers |
+| Document | Contents |
 |---|---|
-| [docs/camera-inventory.md](docs/camera-inventory.md) | Camera devices, permissions and features reported by a real Quest 3 over `adb` |
-| [docs/firmware-analysis.md](docs/firmware-analysis.md) | The six physical camera sensors, read out of the v79 OTA system image |
-| [docs/reverse-engineering.md](docs/reverse-engineering.md) | Decompiling `libxrcamerahal.so`: why no HAL switch exposes the IR cameras |
-| [docs/camera-provider.md](docs/camera-provider.md) | The AOSP Virtual Camera gate: `cameraSource` has no IR option, end-to-end chain |
-| [docs/passthrough-camera-api.md](docs/passthrough-camera-api.md) | How the official Passthrough Camera API works and why it can't give you IR |
-| [docs/prior-art.md](docs/prior-art.md) | Who has tried this and what they found, with links |
-| [docs/root-access.md](docs/root-access.md) | Work log: getting a temporary root shell (IonStack / CVE-2026-43499) to reach the tracking-camera HAL |
-| [docs/system-passthrough.md](docs/system-passthrough.md) | RAM-only script replacing shared system passthrough camera textures with IR |
-| [docs/ir-camera-mapping.md](docs/ir-camera-mapping.md) | Mapping the tracking service's dma-bufs to the physical IR cameras (left/right eye) |
-| [docs/vd-layer-injection.md](docs/vd-layer-injection.md) | Work log: injecting an XR composition layer behind the Virtual Desktop image (route toward showing IR) |
-| [docs/live-ir-feed.md](docs/live-ir-feed.md) | Work log: reading the tracking cameras live and viewing the feed on a PC (`irfeed` daemon + viewer) |
-| [tools/](tools/) | The code: `irfeed.c` daemon, launcher scripts, PC viewer, and dump/cluster helpers |
-| [evidence/](evidence/) | Trimmed `dumpsys` output the inventory is based on |
+| [System passthrough](docs/system-passthrough.md) | Maintained launcher, rendering methods, options, cleanup |
+| [IR resolution](docs/ir-resolution.md) | Sensor specification versus live modes; full-resolution investigation |
+| [Session notes](docs/session-2026-10-25.md) | Chronological experiments, failures, measurements, visual feedback |
+| [IR camera mapping](docs/ir-camera-mapping.md) | Physical eye mapping and DMA buffers; fd/PID examples are historical |
+| [Live IR feed](docs/live-ir-feed.md) | Earlier PC reader/viewer work |
+| [Root access](docs/root-access.md) | Temporary-root work log and recovery context |
+| [Firmware analysis](docs/firmware-analysis.md) | Camera modules identified in the v79 image |
+| [HAL analysis](docs/reverse-engineering.md) | Internal camera pipeline and public API boundary |
+| [Camera provider](docs/camera-provider.md) | App-visible virtual camera registration on the tested build |
+| [Camera inventory](docs/camera-inventory.md), [PCA](docs/passthrough-camera-api.md) | Public RGB camera API observations on v79 |
+| [Earlier VD prototype](docs/vd-layer-injection.md), [prior art](docs/prior-art.md) | Historical approaches and background |
 
-## Test device
+Stock Camera2/Passthrough Camera API access on the tested v79 headset exposes
+RGB cameras, not the tracking cameras. This project reaches IR with temporary
+root below that API. Older documents are research snapshots; the README and
+system-passthrough guide describe the maintained implementation.
 
-| | |
-|---|---|
-| Headset | Meta Quest 3 (`eureka`) |
-| Horizon OS | v79, build `UP1A.231005.007.A1` / `51154110174900520` |
-| Android base | 14, security patch 2025-01-06 |
-| Access | locked bootloader (`verifiedbootstate=green`), temporary root and RAM hooks |
+## Publishing
 
-The original inventory was read-only. Current prototypes use volatile root,
-readers, and compositor hooks; firmware and system partitions remain unchanged.
+To push committed changes and create a new public prerelease from your normal
+PowerShell terminal, choose an unused tag, for example:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\publish_github.ps1 -Tag v0.1.0-preview.2
+```
+
+`v0.1.0-preview.1` describes an older commit. The script does not replace a tag
+that points elsewhere. `-DryRun` checks local prerequisites without network
+access; publishing offers GitHub login if needed. It does not access the headset.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). The optional SGSR shader has its own
+[upstream attribution and license](tools/vendor/sgsr1/README.md).

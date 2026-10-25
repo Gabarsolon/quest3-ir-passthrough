@@ -1,15 +1,22 @@
 # Live IR feed: reading the tracking cameras and viewing them
 
+Historical PC reader/viewer work log. The maintained headset replacement is
+[system passthrough](system-passthrough.md). Frame-rate numbers below describe
+their individual experiments; native completions, publisher counts, received
+images and displayed frames must be measured separately.
+
 Follow-on to [ir-camera-mapping.md](ir-camera-mapping.md). Instead of one-off dumps, this
 runs a daemon that continuously republishes the *newest* frame of one IR camera to a file,
 streams that file to a PC over `adb`, and shows it live. Collected on the test Quest 3 (v79,
 build `51154110174900520`) with the temporary root shell from
-[root-access.md](root-access.md). **Read-only** on the headset: nothing was modified, all
-state is volatile and disappears on reboot.
+[root-access.md](root-access.md). Camera DMA buffers are mapped read-only. The reader writes its own session files;
+current system-launcher files are in tmpfs and disappear on reboot.
 
 ## Result
 
-The IR tracking cameras can be shown live at ~45-60 fps. Under an IR illuminator the room is
+The live reader/viewer was demonstrated, with received/displayed rates varying
+across the experiments below. The later system pipeline measured about 60 distinct
+images/sec per eye; see [the session log](session-2026-10-25.md). Under an IR illuminator the room is
 clearly visible. See the caveats at the end for the conditions the cameras need to stream.
 
 ## How the pixels are reached
