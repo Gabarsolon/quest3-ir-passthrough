@@ -6,6 +6,7 @@ or reboot restores the camera's normal RGB output. No firmware is installed.
 
 import argparse
 import base64
+from contextlib import contextmanager, ExitStack
 import hashlib
 import json
 import os
@@ -27,6 +28,29 @@ HERE = Path(__file__).resolve().parent
 DIRECTORY = "/dev/quest3-ir-session/system"
 CONTROL_PORT = 27343
 SUPPORTED_BUILD = "51154110174900520"
+
+
+@contextmanager
+def temporary_display_refresh(rate):
+    """Keep the display override optional and restore its exact prior value."""
+    if rate is None:
+        yield None
+        return
+    if rate not in (72, 80, 90, 120):
+        raise ValueError("Unsupported Quest 3 display rate")
+    property_name = "debug.oculus.refreshRate"
+    previous = adb.shell("getprop " + property_name).decode().strip()
+    try:
+        adb.shell(f"setprop {property_name} {rate}")
+        actual = adb.shell("getprop " + property_name).decode().strip()
+        if actual != str(rate):
+            raise RuntimeError("Display refresh override was not accepted: " + repr(actual))
+        yield {"requestedHz": rate, "previousOverride": previous}
+    finally:
+        adb.shell("setprop " + property_name + " " + shlex.quote(previous))
+        restored = adb.shell("getprop " + property_name).decode().strip()
+        if restored != previous:
+            raise RuntimeError("Display refresh override was not restored")
 
 
 def root(command, timeout=20):
@@ -235,12 +259,17 @@ def run(options):
 
     keeper = threading.Thread(target=keepalive, daemon=True)
     keeper.start()
+    display_settings = ExitStack()
     try:
         build = adb.shell("getprop ro.build.version.incremental").decode().strip()
         if build != SUPPORTED_BUILD:
             raise RuntimeError(f"This hook was validated on {SUPPORTED_BUILD}; connected build is {build}.")
         if "uid=0(root)" not in root("id"):
             raise RuntimeError("Temporary root is not active.")
+        state["display_refresh"] = display_settings.enter_context(
+            temporary_display_refresh(options.display_refresh))
+        if state["display_refresh"]:
+            print(f"Temporary display request: {options.display_refresh} Hz; restored on stop.", flush=True)
         adb.shell("am broadcast -a com.oculus.vrpowermanager.prox_close\ninput keyevent KEYCODE_WAKEUP")
         mounts = root("cat /proc/mounts")
         if not any(line.split()[1:3] == ["/dev", "tmpfs"] for line in mounts.splitlines()):
@@ -445,6 +474,10 @@ def run(options):
         for pid in readers:
             stop_owned_process(pid, DIRECTORY + "/irfeed")
         stop_owned_process(frida_pid, DIRECTORY + "/frida-server")
+        try:
+            display_settings.close()
+        except Exception as exc:
+            print("Display refresh cleanup:", exc, file=sys.stderr)
         log.close()
         state["status"] = "stopped"
         server.shutdown()
@@ -479,6 +512,8 @@ def main():
     parser.add_argument("--pose-age-ms", type=int, default=8, help="Estimated exposure age before the last observed DMA change; default 8 ms.")
     parser.add_argument("--frequency", choices=["auto", "50", "60"], default="60",
                         help="Temporary utility frequency for fast hands mode; restored on stop. Default 60 Hz.")
+    parser.add_argument("--display-refresh", type=int, choices=[72, 80, 90, 120], default=None,
+                        help="Optional temporary display rate, restored on stop. 120 gives even pacing for 60 Hz IR; camera rate is unchanged.")
     parser.add_argument("--output-size", choices=["640x512", "1280x960", "2328x1748"], default="1280x960",
                         help="GPU remap texture size; source IR remains 640x512. Default 1280x960.")
     parser.add_argument("--filter", choices=["linear", "cubic", "sgsr"], default="linear",

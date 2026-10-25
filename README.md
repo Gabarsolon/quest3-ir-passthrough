@@ -38,6 +38,12 @@ Ctrl+C restores RGB. A second terminal can run the same command with `--stop` or
 [system passthrough](docs/system-passthrough.md) for setup, validation, and current
 geometry/app-coverage limits.
 
+For the frame-latched image method with more even 60 Hz IR pacing, try
+`--display-refresh 120`. This temporarily requests a 120 Hz display and restores
+the prior override on normal stop or startup failure. It does not increase camera
+capture rate. The user confirmed this combination clears tearing, but motion
+still feels laggy. The older direct version also reproduced tearing on a later run.
+
 To push committed changes, make this repository public and publish the
 `v0.1.0-preview.1` prerelease, run in a normal PowerShell terminal:
 

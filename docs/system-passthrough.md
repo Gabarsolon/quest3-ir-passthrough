@@ -44,6 +44,16 @@ frames for timing diagnosis; default is 0. `--set-delay 20` changes this delay o
 a running controller. The user reported no improvement from the 20 ms delay;
 it is currently zero.
 
+`--display-refresh 120` optionally requests a 120 Hz display for this run. The
+60 Hz IR images can then have even two-display-frame holds, instead of alternating
+one/two-frame holds at 90 Hz. The camera rate is unchanged. The launcher saves
+the exact previous `debug.oculus.refreshRate` value and restores it on normal
+stop or startup failure, including when that value was empty. If the controller
+is forcibly terminated or loses its connection, it cannot restore the property;
+reboot clears this nonpersistent override. Without this option, the launcher
+does not read or change display properties. Supported values follow
+[Meta's system-property documentation](https://developers.meta.com/vr/documentation/native/android/ts-systemproperties/).
+
 Historical pose correction is now enabled by default with factory calibration;
 `--no-pose-correction` disables it for diagnostics. `--pose-correction` remains
 available as an explicit option.
@@ -71,6 +81,12 @@ this version active. This confirms the current visual test; other app layouts an
 long-term behavior remain unverified. The low-resolution
 source still limits image detail. `shadow` and `direct` remain explicit legacy
 diagnostics with known rendering artifacts.
+
+The older direct checkout later reproduced tearing too. The current live trial
+uses the frame-latched image method with `--display-refresh 120`; it measured
+about 60 changed image samples/sec and 120 latched frames/sec per eye. The user
+confirmed tearing is gone in this trial, but motion still lags. Update-rate
+counters do not establish acceptable perceived motion or coverage of every app.
 
 Image reconstruction can be selected at launch with `--filter linear|cubic|sgsr`
 or changed live with `--set-filter linear|cubic|sgsr`. Linear is the default;
