@@ -1,5 +1,5 @@
 'use strict';
-// OPTIONS, C_SOURCE and SGSR_SOURCE are supplied by system_passthrough.py.
+// OPTIONS, C_SOURCE, SGSR_SOURCE and AA_SOURCE are supplied by the launcher.
 // Camera buffers are read only. The compositor samples our own YUV images.
 const gl = Process.getModuleByName('libGLESv3.so');
 const egl = Process.getModuleByName('libEGL.so');
@@ -55,12 +55,13 @@ const sources = ['left', 'right'].map(eye => ({
     sequence: Memory.allocUtf8String(OPTIONS.directory + '/' + eye + '.raw.rgba.seq'),
     stamp: Memory.allocUtf8String(OPTIONS.directory + '/' + eye + '.raw.stamp'),
     pixels: Memory.alloc(640 * 512 * 17), upload: 0, yuv: 0, map: 0, mapping: null,
-    ahb: ptr(0), image: ptr(0)
+    ahb: ptr(0), image: ptr(0), antialias: 0
 }));
 let program = 0, framebuffer = 0, display = ptr(0), api;
 let irDelayMs = OPTIONS.irDelayMs;
 let poseTracker = ptr(0);
 let cubicSupported = false;
+let antialiasProgram = 0;
 const createPoseTracker = native(tracking, 'createHeadTrackingFbs', 'pointer', ['ulong']);
 const destroyPoseTracker = native(tracking, 'destroyHeadTrackingFbs', 'void', ['ulong', 'pointer']);
 
@@ -86,6 +87,23 @@ function textureParameters(target) {
     G.param(target, 0x2803, 0x812f);
 }
 
+function compileAntialias() {
+    const vs = compileShader(0x8b31, '#version 310 es\nout highp vec2 uv;void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);uv=p;gl_Position=vec4(p*2.0-1.0,0.0,1.0);}');
+    let fs = 0;
+    try {
+        const dimensions = OPTIONS.outputSize.map(v => Number(v).toFixed(1)).join(',');
+        fs = compileShader(0x8b30, '#version 310 es\n#extension GL_EXT_YUV_target : require\nprecision highp float;\n#define INPUT_SIZE vec2(' + dimensions + ')\n' + AA_SOURCE);
+        antialiasProgram = G.program();
+        G.attachShader(antialiasProgram, vs); G.attachShader(antialiasProgram, fs);
+        G.link(antialiasProgram); G.programiv(antialiasProgram, 0x8b82, scratch);
+        if (scratch.readS32() !== 1) {
+            const log = Memory.alloc(8192);
+            G.programlog(antialiasProgram, 8192, ptr(0), log);
+            throw Error(log.readUtf8String());
+        }
+    } finally { G.delShader(vs); if (fs) G.delShader(fs); }
+}
+
 function initialize() {
     if (OPTIONS.calibration && sources.some(s => s.mapping === null)) return;
     try {
@@ -104,7 +122,8 @@ function initialize() {
         const coordinates = OPTIONS.calibration
             ? 'p=texture(irMapping,p).rg;'
             : transform + fit;
-        const fragment = '#version 310 es\n#extension GL_EXT_YUV_target : require\n#define SGSR_SHARPNESS ' + Number(OPTIONS.sgsrSharpness).toFixed(6) + '\nprecision highp float;in highp vec2 uv;uniform highp sampler2D irImage;uniform highp sampler2D irMapping;uniform vec2 irRange;uniform int irFilter;layout(yuv) out vec4 color;\n' + SGSR_SOURCE + '\nvoid main(){vec2 p=(uv-0.5)/' + Number(OPTIONS.zoom).toFixed(6) + '+0.5;' + coordinates + 'float sampleY=irFilter==2?sgsrLuma(p):texture(irImage,p).r;float y=clamp((sampleY-irRange.x)*irRange.y,0.0,1.0);if(any(lessThan(p,vec2(0.0)))||any(greaterThan(p,vec2(1.0))))y=0.0;color=vec4(y,0.5,0.5,1.0);}';
+        const output = OPTIONS.antialiasing === 'edge' ? 'out vec4 color;' : 'layout(yuv) out vec4 color;';
+        const fragment = '#version 310 es\n#extension GL_EXT_YUV_target : require\n#define SGSR_SHARPNESS ' + Number(OPTIONS.sgsrSharpness).toFixed(6) + '\nprecision highp float;in highp vec2 uv;uniform highp sampler2D irImage;uniform highp sampler2D irMapping;uniform vec2 irRange;uniform int irFilter;' + output + '\n' + SGSR_SOURCE + '\nvoid main(){vec2 p=(uv-0.5)/' + Number(OPTIONS.zoom).toFixed(6) + '+0.5;' + coordinates + 'float sampleY=irFilter==2?sgsrLuma(p):texture(irImage,p).r;float y=clamp((sampleY-irRange.x)*irRange.y,0.0,1.0);if(any(lessThan(p,vec2(0.0)))||any(greaterThan(p,vec2(1.0))))y=0.0;color=vec4(y,0.5,0.5,1.0);}';
         let fs = 0;
         try {
             fs = compileShader(0x8b30, fragment);
@@ -127,6 +146,12 @@ function initialize() {
         descriptor.add(16).writeU64(0x300); // GPU sampled image + framebuffer
         attrs.writeU32(0x30d2); attrs.add(4).writeU32(1); attrs.add(8).writeU32(0x3038);
         for (const source of sources) {
+            if (OPTIONS.antialiasing === 'edge') {
+                G.genTex(1, scratch); source.antialias = scratch.readU32();
+                G.bindTex(0x0de1, source.antialias); textureParameters(0x0de1);
+                G.texImage(0x0de1, 0, 0x8229, OPTIONS.outputSize[0], OPTIONS.outputSize[1],
+                    0, 0x1903, 0x1401, ptr(0));
+            }
             if (OPTIONS.calibration) {
                 G.genTex(1, scratch); source.map = scratch.readU32();
                 G.bindTex(0x0de1, source.map); textureParameters(0x0de1);
@@ -147,6 +172,11 @@ function initialize() {
         const imageLocation = G.location(program, Memory.allocUtf8String('irImage'));
         const rangeLocation = G.location(program, Memory.allocUtf8String('irRange'));
         api.filterLocation(G.location(program, Memory.allocUtf8String('irFilter')));
+        if (OPTIONS.antialiasing === 'edge') {
+            compileAntialias();
+            api.antialias(antialiasProgram, sources[0].antialias, sources[1].antialias,
+                G.location(antialiasProgram, Memory.allocUtf8String('irResolvedImage')));
+        }
         if (OPTIONS.calibration) api.maps(sources[0].map, sources[1].map,
             G.location(program, Memory.allocUtf8String('irMapping')));
         api.resources(program, framebuffer, sources[0].upload, sources[1].upload,
@@ -162,15 +192,16 @@ function initialize() {
 function cleanup() {
     if (!poseTracker.isNull()) { destroyPoseTracker(9, poseTracker); poseTracker = ptr(0); }
     for (const source of sources) {
-        for (const texture of [source.upload, source.yuv, source.map]) {
+        for (const texture of [source.upload, source.yuv, source.map, source.antialias]) {
             if (texture) { scratch.writeU32(texture); G.delTex(1, scratch); }
         }
-        source.upload = 0; source.yuv = 0; source.map = 0;
+        source.upload = 0; source.yuv = 0; source.map = 0; source.antialias = 0;
         if (!source.image.isNull()) { destroyImage(display, source.image); source.image = ptr(0); }
         if (!source.ahb.isNull()) { release(source.ahb); source.ahb = ptr(0); }
     }
     if (framebuffer) { scratch.writeU32(framebuffer); G.delFbo(1, scratch); framebuffer = 0; }
     if (program) { G.delProgram(program); program = 0; }
+    if (antialiasProgram) { G.delProgram(antialiasProgram); antialiasProgram = 0; }
     send({kind: 'cleaned'});
 }
 
@@ -197,6 +228,7 @@ api = {
     delay: new NativeFunction(module.set_delay, 'void', ['uint']),
     filter: new NativeFunction(module.set_filter, 'void', ['uint']),
     filterLocation: new NativeFunction(module.set_filter_location, 'void', ['int']),
+    antialias: new NativeFunction(module.set_antialias, 'void', ['uint', 'uint', 'uint', 'int']),
     pose: new NativeFunction(module.configure_pose, 'void', ['pointer', 'pointer', 'uint', 'pointer', 'pointer']),
     poseAge: new NativeFunction(module.set_pose_age, 'void', ['uint']),
     poseMethod: new NativeFunction(module.set_pose_method, 'void', ['uint']),
@@ -231,7 +263,7 @@ function stats() {
         cleaned: !!values[2], errors: values[3], substitutedDraws: values[4],
         poseCorrection: !!OPTIONS.poseCorrection, poseMethod: OPTIONS.poseMethod, poseCorrectedDraws: values[15],
         poseSamples: values[16], poseFailures: values[17], poseAgeMs: values[18],
-        filter: filterModes[values[19]], sgsrSharpness: OPTIONS.sgsrSharpness,
+        filter: filterModes[values[19]], sgsrSharpness: OPTIONS.sgsrSharpness, antialiasing: OPTIONS.antialiasing,
         refreshes: values[5], lastSubstitution: values[6], sources: sources.map((s, i) =>
             ({eye: s.eye, uploads: values[7 + i], sequence: values[9 + i],
                 changedSamples: values[13 + i], valid: !!values[11 + i]}))};

@@ -74,6 +74,14 @@ between linear and SGSR were checked successfully. Current source resolution
 remains640x512. Sampler bindings are explicitly saved/restored so these options
 use our own image filters even if another app has bound sampler objects.
 
+`--aa edge --sgsr-sharpness 1.0` tests gentler sharpening with a spatial,
+directional anti-aliasing pass. It reconstructs into an owned R8 image, then
+resolves high-contrast edges into the final YUV image. Flat regions bypass the
+edge filter. This adds about2.5MB of image storage at1280x960 for both eyes and
+one GPU pass per updated image. The initial test held72Hz display rendering,
+about2.6ms timewarp and zeroGL/pose errors. Normal stop and startup with AA on/off
+were checked. Visual benefit is pending, so `--aa off` remains the default.
+
 The launcher reuses existing `/data/local/tmp/su` and Frida helpers. It does not
 run the saved root exploit, which writes userdata files. Temporary root must
 already be active; root restoration remains a separate operation.
@@ -205,21 +213,23 @@ the substitution, but each alternate/foveated passthrough path needs its own
 validation; not every app has been tested.
 
 
-## Head motion and Home recovery: still under investigation
+## Earlier head-motion and Home recovery work
 
 Despite the measured 60 Hz camera and texture updates, the user reported very
 poor apparent frame rate during head motion and persistent pixelation. The
 runtime logged 72 Hz rendering with roughly 1.8 ms timewarp and no sustained
 stale frames. These measurements do not establish smooth passthrough motion.
-RGB and IR capture poses/timestamps still need to be matched, and the source
-stream remains only 640x512; a larger remap texture cannot add captured detail.
+Historical pose correction subsequently fixed the head-motion problem, and the
+direct camera-field method fixed the menu regression from the shadow-buffer
+method. The user confirmed both. The source stream remains640x512; a larger
+remap texture cannot add captured detail.
 Two color ISP contexts completed about 72 unique requests/sec on this setup.
 That is a processing-cadence measurement, not a verified 120 fps RGB sensor mode.
 
 Home independently reported "Shell is locked" with no panels. Restarting only
 com.oculus.vrshell cleared that state (unlocked mode became true), and a headset
 screenshot confirmed that its tracking-loss dialog became visible. Full menu
-recovery remains dependent on tracking/boundary initialization.
+recovery at that point remained dependent on tracking/boundary initialization.
 
 At the user's request for recovery, IR was stopped and both old and new readers
 were removed. The native trackingservice_ctl wrapper could not set init control
@@ -227,15 +237,15 @@ properties from the existing root helper's kernel SELinux context. A transient
 runcon init-context ctl.restart request then restarted trackingservice under
 init. Camera service PID 855 and compositor PID 1764 remained unchanged; the
 headset did not reboot and temporary root remained active. The restarted tracker
-initially reported 3DOF, awaiting positional initialization. IR stays off while
-the user checks native tracking recovery. No sensor-service restart, firmware
+initially reported 3DOF, awaiting positional initialization. IR was left off for
+native tracking recovery. No sensor-service restart, firmware
 update, boundary deletion, or app-data clearing was performed.
 
 
-The current resumed test after root/wake recovery uses the stock camera schedule
-(`--no-fast-mode`) and a 20 ms experimental IR delay. Valid 6DOF and roughly 37.5
-changed images/sec per eye were verified. Root remains active and the runtime
-proximity-close override keeps the headset awake. Calibration lookup coordinates
-now use full float precision and highp samplers. The user still reported judder
-before this timing test; visual results from the delay/precision changes are
-pending. The launcher waits for advancing publishers before replacing RGB.
+The user then requested a reboot, which restored menus and tracking. Temporary
+root was re-established. A stock-schedule37.5Hz test and20ms IR delay failed to
+improve the motion problem. The successful version uses the60Hz schedule,
+full-precision calibration maps and historical capture poses as described above.
+The runtime proximity-close override keeps the headset awake, and the launcher
+waits for advancing publishers before replacing RGB. No firmware update or
+persistent sleep/root setting was installed.

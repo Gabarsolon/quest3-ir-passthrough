@@ -321,10 +321,12 @@ def run(options):
                     "poseMethod": options.pose_method,
                     "filter": options.filter,
                     "sgsrSharpness": options.sgsr_sharpness,
+                    "antialiasing": options.aa,
                     "cameraPoses": camera_poses}
         source = ("const OPTIONS=" + json.dumps(settings) + ";\nconst C_SOURCE="
                   + json.dumps((HERE / "system_passthrough.c").read_text()) + ";\n"
                   + "const SGSR_SOURCE=" + json.dumps((HERE / "vendor" / "sgsr1" / "mono.glsl").read_text()) + ";\n"
+                  + "const AA_SOURCE=" + json.dumps((HERE / "ir_antialias.glsl").read_text()) + ";\n"
                   + (HERE / "system_passthrough.js").read_text())
         script = session.create_script(source)
         script.on("message", message)
@@ -455,6 +457,8 @@ def main():
                         help="IR reconstruction filter. Cubic requires GL_IMG_texture_filter_cubic.")
     parser.add_argument("--sgsr-sharpness", type=float, default=1.5,
                         help="SGSR 1 edge sharpness, 1 to 2; default 1.5.")
+    parser.add_argument("--aa", choices=["off", "edge"], default="off",
+                        help="Optional directional edge anti-aliasing after IR reconstruction.")
     parser.add_argument("--no-calibration", action="store_true", help="Use the earlier rotated/cropped view instead of factory ray maps.")
     parser.add_argument("--no-normalize", action="store_true")
     parser.add_argument("--stretch", action="store_true", help="Use the whole sensor image instead of preserving its aspect ratio.")

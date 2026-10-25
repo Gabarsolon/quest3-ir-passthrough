@@ -61,6 +61,7 @@ typedef struct {
   float camera_pose[7];
   U pose_valid;
   U upload_filter;
+  U antialias_texture;
 } Source;
 
 typedef struct {
@@ -83,6 +84,8 @@ typedef struct {
   unsigned char pose_scratch[4096];
   U filter_mode;
   int filter_location;
+  U antialias_program;
+  int antialias_image_location;
 } Control;
 
 extern Control control;
@@ -127,6 +130,12 @@ void heartbeat(void) { control.heartbeat = now_ms(); }
 void set_delay(U value) { if (value <= 200) control.delay_ms = value; }
 void set_filter(U value) { if (value <= 2) control.filter_mode = value; }
 void set_filter_location(int location) { control.filter_location = location; }
+void set_antialias(U program, U left, U right, int image_location) {
+  control.antialias_program = program;
+  control.antialias_image_location = image_location;
+  control.sources[0].antialias_texture = left;
+  control.sources[1].antialias_texture = right;
+}
 void configure_pose(void *tracker, const float *cameras, U age,
     const char *left_stamp, const char *right_stamp) {
   int i, j;
@@ -267,10 +276,20 @@ static void refresh_source(Source *s) {
     glBindTexture(0x0de1, s->map_texture);
     glActiveTexture(0x84cf);
   }
-  glFramebufferTexture2D(0x8ca9, 0x8ce0, 0x8d65, s->yuv_texture, 0);
+  glFramebufferTexture2D(0x8ca9, 0x8ce0, control.antialias_program ? 0x0de1 : 0x8d65,
+      control.antialias_program ? s->antialias_texture : s->yuv_texture, 0);
   if (glCheckFramebufferStatus(0x8ca9) != 0x8cd5) { fail(); return; }
   glUniform2f(control.range_location, low, scale);
   glDrawArrays(4, 0, 3);
+  if (control.antialias_program) {
+    glUseProgram(control.antialias_program);
+    glUniform1i(control.antialias_image_location, 15);
+    glBindTexture(0x0de1, s->antialias_texture);
+    glFramebufferTexture2D(0x8ca9, 0x8ce0, 0x8d65, s->yuv_texture, 0);
+    if (glCheckFramebufferStatus(0x8ca9) != 0x8cd5) { fail(); return; }
+    glDrawArrays(4, 0, 3);
+    glUseProgram(control.program);
+  }
   if (glGetError() != 0) { fail(); return; }
   s->sequence = sequence;
   s->has_sequence = 1;
