@@ -16,7 +16,9 @@ looked smooth but later produced recurring black rectangles in the room and menu
 The replacement `--pose-method image` is now the default: it corrects our IR
 image while preserving native camera and menu poses. Holding each IR capture
 across a whole eye/frame cleared the remaining tearing in the user's test
-("seems perfect now"). Source resolution remains
+("seems perfect now"). Follow-up comparison reported moving-object trailing or
+stutter versus the earlier direct method; cadence/reprojection analysis continues
+in the session notes. Source resolution remains
 640x512. Optional monochrome
 Snapdragon GSR1 reconstruction improved edges while keeping motion smooth.
 Linear filtering is the default, with extra anti-aliasing off. Select
