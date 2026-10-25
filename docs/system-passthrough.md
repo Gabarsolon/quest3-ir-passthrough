@@ -66,7 +66,9 @@ correctness: the user reported improvement with some remaining tearing. The
 current version latches new captures at the start of each eye/frame, rather than
 allowing the 12ms poll timer to switch images between scanout halves. Its first
 measurement held about 60 changed image samples/sec and 90 latched frames/sec per
-eye, with no GL/pose failures; visual confirmation is pending. The low-resolution
+eye, with no GL/pose failures. The user then confirmed "seems perfect now" with
+this version active. This confirms the current visual test; other app layouts and
+long-term behavior remain unverified. The low-resolution
 source still limits image detail. `shadow` and `direct` remain explicit legacy
 diagnostics with known rendering artifacts.
 
