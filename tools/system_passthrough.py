@@ -453,8 +453,8 @@ def main():
                         help="Temporary utility frequency for fast hands mode; restored on stop. Default 60 Hz.")
     parser.add_argument("--output-size", choices=["640x512", "1280x960", "2328x1748"], default="1280x960",
                         help="GPU remap texture size; source IR remains 640x512. Default 1280x960.")
-    parser.add_argument("--filter", choices=["linear", "cubic", "sgsr"], default="sgsr",
-                        help="IR reconstruction filter. Cubic requires GL_IMG_texture_filter_cubic.")
+    parser.add_argument("--filter", choices=["linear", "cubic", "sgsr"], default="linear",
+                        help="IR reconstruction filter; default linear. Cubic requires GL_IMG_texture_filter_cubic.")
     parser.add_argument("--sgsr-sharpness", type=float, default=1.5,
                         help="SGSR 1 edge sharpness, 1 to 2; default 1.5.")
     parser.add_argument("--aa", choices=["off", "edge"], default="off",

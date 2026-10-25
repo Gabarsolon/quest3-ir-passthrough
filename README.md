@@ -14,10 +14,13 @@ tracking in normal Quest passthrough. The current hands-mode pipeline has measur
 about 60 changed IR images/sec per eye. Historical pose correction now runs by
 default; the user confirmed smooth IR motion without the earlier room-image
 flicker/black rectangles. Updating only the runtime camera-pose fields also
-resolved the menu tearing. Source resolution remains 640x512; improving image
-quality is the remaining work. A monochrome Snapdragon GSR1 reconstruction pass
-now runs by default; the user confirmed clearer edges and smooth motion.
-`--filter linear` selects the earlier reconstruction. It uses temporary root and an in-memory hook; Virtual Desktop is
+resolved the menu tearing. Source resolution remains 640x512. Optional monochrome
+Snapdragon GSR1 reconstruction improved edges while keeping motion smooth.
+Linear filtering is the default, with extra anti-aliasing off. Select
+`--filter cubic` or `--filter sgsr` for an individual run; the final tested
+enhancement combination is `--filter sgsr --sgsr-sharpness 1.0 --aa edge`.
+These options are not saved to the headset or remembered by later launches.
+It uses temporary root and an in-memory hook; Virtual Desktop is
 not required. Run it from PowerShell with the headset connected and temporary
 root already active:
 
