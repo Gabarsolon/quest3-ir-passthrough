@@ -1,5 +1,5 @@
 'use strict';
-// OPTIONS, C_SOURCE, SGSR_SOURCE and AA_SOURCE are supplied by the launcher.
+// OPTIONS, C_SOURCE, SGSR_SOURCE, AA_SOURCE and WARP_SOURCE come from the launcher.
 // Camera buffers are read only. The compositor samples our own YUV images.
 const gl = Process.getModuleByName('libGLESv3.so');
 const egl = Process.getModuleByName('libEGL.so');
@@ -48,6 +48,8 @@ const destroyImage = extension('eglDestroyImageKHR', 'uint', ['pointer', 'pointe
 const scratch = Memory.alloc(32), descriptor = Memory.alloc(40), attrs = Memory.alloc(12);
 const storage = Memory.alloc(16384);
 storage.writeByteArray(new Uint8Array(16384));
+// Legacy direct-mode records need 136 bytes each. Reserve padding; all writable
+// CModule state comes from external memory, including image-mode pose caches.
 const poseRecords = Memory.alloc(1024 * 144);
 poseRecords.writeByteArray(new Uint8Array(1024 * 144));
 const sources = ['left', 'right'].map(eye => ({
@@ -62,6 +64,7 @@ let irDelayMs = OPTIONS.irDelayMs;
 let poseTracker = ptr(0);
 let cubicSupported = false;
 let antialiasProgram = 0;
+const imageWarp = OPTIONS.poseCorrection && OPTIONS.poseMethod === 'image';
 const createPoseTracker = native(tracking, 'createHeadTrackingFbs', 'pointer', ['ulong']);
 const destroyPoseTracker = native(tracking, 'destroyHeadTrackingFbs', 'void', ['ulong', 'pointer']);
 
@@ -104,6 +107,19 @@ function compileAntialias() {
     } finally { G.delShader(vs); if (fs) G.delShader(fs); }
 }
 
+function warpConstants() {
+    if (!imageWarp) return '';
+    const constant = (name, values, type) => '#define ' + name + ' ' + type + '(' +
+        values.map(value => Number(value).toExponential(12)).join(',') + ')\n';
+    return OPTIONS.warpParameters.map((eye, i) =>
+        constant('IR_ROTATION_' + i, eye.rotation, 'mat3') +
+        constant('IR_PROJECTION_' + i, eye.projection, 'vec3') +
+        constant('IR_RADIAL_A_' + i, eye.distortion.slice(0, 4), 'vec4') +
+        constant('IR_RADIAL_B_' + i, eye.distortion.slice(4, 6), 'vec2') +
+        constant('IR_TANGENTIAL_' + i, eye.distortion.slice(6, 8), 'vec2') +
+        constant('IR_SIZE_' + i, eye.size, 'vec2')).join('');
+}
+
 function initialize() {
     if (OPTIONS.calibration && sources.some(s => s.mapping === null)) return;
     try {
@@ -120,10 +136,10 @@ function initialize() {
         const crop = OPTIONS.stretch ? [1, 1] : (OPTIONS.rotate % 180 === 90 ? [0.6006872852, 1] : [1, 0.9385738832]);
         const fit = 'p=(p-0.5)*vec2(' + crop.map(v => v.toFixed(8)).join(',') + ')+0.5;';
         const coordinates = OPTIONS.calibration
-            ? 'p=texture(irMapping,p).rg;'
+            ? (imageWarp ? 'p=warpCoordinates(p);' : 'p=texture(irMapping,p).rg;')
             : transform + fit;
         const output = OPTIONS.antialiasing === 'edge' ? 'out vec4 color;' : 'layout(yuv) out vec4 color;';
-        const fragment = '#version 310 es\n#extension GL_EXT_YUV_target : require\n#define SGSR_SHARPNESS ' + Number(OPTIONS.sgsrSharpness).toFixed(6) + '\nprecision highp float;in highp vec2 uv;uniform highp sampler2D irImage;uniform highp sampler2D irMapping;uniform vec2 irRange;uniform int irFilter;' + output + '\n' + SGSR_SOURCE + '\nvoid main(){vec2 p=(uv-0.5)/' + Number(OPTIONS.zoom).toFixed(6) + '+0.5;' + coordinates + 'float sampleY=irFilter==2?sgsrLuma(p):texture(irImage,p).r;float y=clamp((sampleY-irRange.x)*irRange.y,0.0,1.0);if(any(lessThan(p,vec2(0.0)))||any(greaterThan(p,vec2(1.0))))y=0.0;color=vec4(y,0.5,0.5,1.0);}';
+        const fragment = '#version 310 es\n#extension GL_EXT_YUV_target : require\n#define SGSR_SHARPNESS ' + Number(OPTIONS.sgsrSharpness).toFixed(6) + '\nprecision highp float;in highp vec2 uv;uniform highp sampler2D irImage;uniform highp sampler2D irMapping;uniform vec2 irRange;uniform int irFilter;' + output + '\n' + SGSR_SOURCE + '\n' + (imageWarp ? warpConstants() + WARP_SOURCE : '') + '\nvoid main(){vec2 p=(uv-0.5)/' + Number(OPTIONS.zoom).toFixed(6) + '+0.5;' + coordinates + 'float sampleY=irFilter==2?sgsrLuma(p):texture(irImage,p).r;float y=clamp((sampleY-irRange.x)*irRange.y,0.0,1.0);if(any(lessThan(p,vec2(0.0)))||any(greaterThan(p,vec2(1.0))))y=0.0;color=vec4(y,0.5,0.5,1.0);}';
         let fs = 0;
         try {
             fs = compileShader(0x8b30, fragment);
@@ -172,6 +188,10 @@ function initialize() {
         const imageLocation = G.location(program, Memory.allocUtf8String('irImage'));
         const rangeLocation = G.location(program, Memory.allocUtf8String('irRange'));
         api.filterLocation(G.location(program, Memory.allocUtf8String('irFilter')));
+        if (imageWarp) api.warpLocations(
+            G.location(program, Memory.allocUtf8String('irPoseTop')),
+            G.location(program, Memory.allocUtf8String('irPoseBottom')),
+            G.location(program, Memory.allocUtf8String('irEye')));
         if (OPTIONS.antialiasing === 'edge') {
             compileAntialias();
             api.antialias(antialiasProgram, sources[0].antialias, sources[1].antialias,
@@ -216,7 +236,7 @@ for (const name of ['glGetIntegerv', 'glGetBooleanv', 'glIsEnabled', 'glEnable',
     'glGetUniformLocation', 'glGetUniformiv', 'glActiveTexture', 'glBindTexture', 'glTexParameteri', 'glBindSampler',
     'glBindFramebuffer', 'glFramebufferTexture2D', 'glCheckFramebufferStatus', 'glGetError',
     'glBindBuffer', 'glPixelStorei', 'glTexSubImage2D', 'glViewport', 'glColorMask',
-    'glUseProgram', 'glUniform1i', 'glUniform2f', 'glDrawArrays', 'glGetIntegeri_v', 'glGetInteger64i_v',
+    'glUseProgram', 'glUniform1i', 'glUniform2f', 'glUniform4f', 'glDrawArrays', 'glGetIntegeri_v', 'glGetInteger64i_v',
     'glGetBufferPointerv', 'glGetBufferParameteriv', 'glIsBuffer', 'glGenBuffers', 'glDeleteBuffers', 'glBufferData', 'glBufferSubData',
     'glBindBufferRange', 'glGetUniformIndices', 'glGetActiveUniformsiv', 'glGetActiveUniformBlockiv',
     'glMapBufferRange', 'glFenceSync', 'glClientWaitSync', 'glDeleteSync']) imports[name] = gl.getExportByName(name);
@@ -228,6 +248,7 @@ api = {
     delay: new NativeFunction(module.set_delay, 'void', ['uint']),
     filter: new NativeFunction(module.set_filter, 'void', ['uint']),
     filterLocation: new NativeFunction(module.set_filter_location, 'void', ['int']),
+    warpLocations: new NativeFunction(module.set_warp_locations, 'void', ['int', 'int', 'int']),
     antialias: new NativeFunction(module.set_antialias, 'void', ['uint', 'uint', 'uint', 'int']),
     pose: new NativeFunction(module.configure_pose, 'void', ['pointer', 'pointer', 'uint', 'pointer', 'pointer']),
     poseAge: new NativeFunction(module.set_pose_age, 'void', ['uint']),
@@ -242,7 +263,7 @@ api.configure(sources[0].path, sources[1].path, sources[0].sequence, sources[1].
 api.delay(irDelayMs);
 const filterModes = ['linear', 'cubic', 'sgsr'];
 api.filter(filterModes.indexOf(OPTIONS.filter));
-api.poseMethod(OPTIONS.poseMethod === 'direct' ? 1 : 0);
+api.poseMethod({shadow: 0, direct: 1, image: 2}[OPTIONS.poseMethod]);
 if (OPTIONS.poseCorrection) {
     const extrinsics = Memory.alloc(14 * 4);
     extrinsics.writeByteArray(new Float32Array(OPTIONS.cameraPoses.flat()).buffer);
@@ -254,15 +275,16 @@ if (OPTIONS.poseCorrection) {
     }
     api.pose(poseTracker, extrinsics, OPTIONS.poseAgeMs, sources[0].stamp, sources[1].stamp);
 }
-const statsBuffer = Memory.alloc(20 * 8);
+const statsBuffer = Memory.alloc(24 * 8);
 function stats() {
     api.stats(statsBuffer);
-    const values = Array.from({length: 20}, (_, i) => Number(statsBuffer.add(i * 8).readU64()));
+    const values = Array.from({length: 24}, (_, i) => Number(statsBuffer.add(i * 8).readU64()));
     return {strategy: 'owned-yuv-native', sourceSize: [640, 512], outputSize: OPTIONS.outputSize, irDelayMs,
         enabled: !!values[0], ready: !!values[1],
         cleaned: !!values[2], errors: values[3], substitutedDraws: values[4],
         poseCorrection: !!OPTIONS.poseCorrection, poseMethod: OPTIONS.poseMethod, poseCorrectedDraws: values[15],
         poseSamples: values[16], poseFailures: values[17], poseAgeMs: values[18],
+        imageRemaps: values.slice(20, 22), nativePoseChanges: values.slice(22, 24),
         filter: filterModes[values[19]], sgsrSharpness: OPTIONS.sgsrSharpness, antialiasing: OPTIONS.antialiasing,
         refreshes: values[5], lastSubstitution: values[6], sources: sources.map((s, i) =>
             ({eye: s.eye, uploads: values[7 + i], sequence: values[9 + i],
@@ -291,5 +313,23 @@ rpc.exports.setmap = function (eye, data) {
     const mapping = Memory.alloc(data.byteLength);
     mapping.writeByteArray(data);
     sources[eye].mapping = mapping;
+};
+rpc.exports.setmapchunk = function (eye, offset, data) {
+    if (eye !== 0 && eye !== 1) throw Error('Invalid eye');
+    const size = 640 * 512 * 8, source = sources[eye];
+    if (!Number.isInteger(offset) || offset < 0 || !data.byteLength || offset + data.byteLength > size)
+        throw Error('Invalid calibration map chunk');
+    if (offset === 0) {
+        source.pendingMap = Memory.alloc(size);
+        source.pendingBytes = 0;
+    }
+    if (!source.pendingMap || offset !== source.pendingBytes) throw Error('Calibration chunks out of order');
+    source.pendingMap.add(offset).writeByteArray(data);
+    source.pendingBytes += data.byteLength;
+    // Rendering must not see a partly transferred map.
+    if (source.pendingBytes === size) {
+        source.mapping = source.pendingMap;
+        source.pendingMap = null;
+    }
 };
 send({kind: 'armed', strategy: 'owned-yuv-native', watchdogSeconds: 4});

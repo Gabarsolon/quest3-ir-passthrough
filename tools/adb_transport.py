@@ -1,12 +1,25 @@
 """Use the existing local ADB server without launching another adb client."""
 import argparse
+import os
 import pathlib
 import socket
 import struct
 import sys
 import time
 
-SERIAL = "2G0YC5ZF9Q01J0"
+TARGET_FILE = pathlib.Path(os.environ.get("LOCALAPPDATA", pathlib.Path.home() / ".config")) / "quest3-ir" / "adb-target.txt"
+
+
+def saved_serial():
+    try:
+        return TARGET_FILE.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return ""
+
+
+# Host-only preference; no headset property is changed. Explicit launch --serial
+# still overrides this default, and the environment can select a temporary target.
+SERIAL = os.environ.get("QUEST3_ADB_SERIAL") or saved_serial() or "2G0YC5ZF9Q01J0"
 
 
 def readn(sock, count):
@@ -91,10 +104,12 @@ def forward(local, remote):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--serial", default=SERIAL)
     parser.add_argument("--timeout", type=float, default=15)
     parser.add_argument("command", choices=["shell", "pull", "push", "forward"])
     parser.add_argument("args", nargs="+")
     opts = parser.parse_args()
+    SERIAL = opts.serial
     if opts.command == "shell":
         with connect("shell:" + " ".join(opts.args), opts.timeout) as sock:
             while True:

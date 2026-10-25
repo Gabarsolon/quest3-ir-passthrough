@@ -11,10 +11,12 @@ This repo is documentation plus the small tools we used. It collects what the he
 The current prototype replaces the system compositor's RGB passthrough camera
 textures with live stereo IR. The user confirmed upright stereo IR, corrected proportions, and aligned hand
 tracking in normal Quest passthrough. The current hands-mode pipeline has measured
-about 60 changed IR images/sec per eye. Historical pose correction now runs by
-default; the user confirmed smooth IR motion without the earlier room-image
-flicker/black rectangles. Updating only the runtime camera-pose fields also
-resolved the menu tearing. Source resolution remains 640x512. Optional monochrome
+about 60 changed IR images/sec per eye. Earlier pose-buffer methods initially
+looked smooth but later produced recurring black rectangles in the room and menu.
+The replacement `--pose-method image` is now the default: it corrects our IR
+image while preserving native camera and menu poses. It has passed a live
+rendering/cleanup check; visual validation is pending. Source resolution remains
+640x512. Optional monochrome
 Snapdragon GSR1 reconstruction improved edges while keeping motion smooth.
 Linear filtering is the default, with extra anti-aliasing off. Select
 `--filter cubic` or `--filter sgsr` for an individual run; the final tested

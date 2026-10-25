@@ -3,6 +3,7 @@
 
 typedef unsigned int U;
 typedef unsigned long long Q;
+enum { POSE_SHADOW, POSE_DIRECT, POSE_IMAGE };
 typedef struct { long sec, nsec; } Clock;
 extern int clock_gettime(int, Clock *);
 extern int open(const char *, int, ...);
@@ -23,6 +24,7 @@ extern void glBindBuffer(U, U), glPixelStorei(U, int);
 extern void glTexSubImage2D(U, int, int, int, int, int, U, U, const void *);
 extern void glViewport(int, int, int, int), glColorMask(unsigned char, unsigned char, unsigned char, unsigned char);
 extern void glUseProgram(U), glUniform1i(int, int), glUniform2f(int, float, float);
+extern void glUniform4f(int, float, float, float, float);
 extern void glDrawArrays(U, int, int);
 extern void glGetIntegeri_v(U, U, int *), glGetInteger64i_v(U, U, long long *);
 extern void glGetBufferPointerv(U, U, void **), glGenBuffers(int, U *), glDeleteBuffers(int, const U *);
@@ -62,6 +64,9 @@ typedef struct {
   U pose_valid;
   U upload_filter;
   U antialias_texture;
+  float range_low, range_scale, native_pose[8];
+  U native_valid, remap_dirty;
+  Q last_poll, remaps, native_changes;
 } Source;
 
 typedef struct {
@@ -75,7 +80,7 @@ typedef struct {
   void *tracker;
   float camera_from_device[2][7];
   U pose_age_ms, pose_buffer, pose_stride, pose_next;
-  U pose_direct, pose_record_count;
+  U pose_method, pose_record_count;
   unsigned char *pose_mapping;
   void *pose_fences[32];
   struct { U buffer; unsigned char *pointer; } original_mappings[64];
@@ -86,6 +91,7 @@ typedef struct {
   int filter_location;
   U antialias_program;
   int antialias_image_location;
+  int warp_top_location, warp_bottom_location, warp_eye_location;
 } Control;
 
 extern Control control;
@@ -130,6 +136,11 @@ void heartbeat(void) { control.heartbeat = now_ms(); }
 void set_delay(U value) { if (value <= 200) control.delay_ms = value; }
 void set_filter(U value) { if (value <= 2) control.filter_mode = value; }
 void set_filter_location(int location) { control.filter_location = location; }
+void set_warp_locations(int top, int bottom, int eye) {
+  control.warp_top_location = top;
+  control.warp_bottom_location = bottom;
+  control.warp_eye_location = eye;
+}
 void set_antialias(U program, U left, U right, int image_location) {
   control.antialias_program = program;
   control.antialias_image_location = image_location;
@@ -147,7 +158,7 @@ void configure_pose(void *tracker, const float *cameras, U age,
     control.camera_from_device[i][j] = cameras[i * 7 + j];
 }
 void set_pose_age(U value) { if (value <= 100) control.pose_age_ms = value; }
-void set_pose_method(U direct) { control.pose_direct = direct; }
+void set_pose_method(U method) { control.pose_method = method; }
 void set_maps(U left, U right, int location) {
   control.sources[0].map_texture = left;
   control.sources[1].map_texture = right;
@@ -169,6 +180,9 @@ void stats(Q *out) {
   out[15] = control.pose_draws; out[16] = control.pose_samples;
   out[17] = control.pose_failures; out[18] = control.pose_age_ms;
   out[19] = control.filter_mode;
+  out[20] = control.sources[0].remaps; out[21] = control.sources[1].remaps;
+  out[22] = control.sources[0].native_changes;
+  out[23] = control.sources[1].native_changes;
 }
 
 static int integer(U key) { int value; glGetIntegerv(key, &value); return value; }
@@ -214,14 +228,14 @@ static int capture_pose(Source *source, Q observed_ns) {
   return 1;
 }
 
-static void refresh_source(Source *s) {
+static int poll_source(Source *s) {
   Q sequence;
-  if (!read_all(s->sequence_path, &sequence, 8)) return;
+  if (!read_all(s->sequence_path, &sequence, 8)) return 0;
   if (!s->has_ingested || sequence != s->ingested_sequence) {
     U slot = s->history_next;
     Q stamp[2] = {0, 0};
-    if (control.tracker && (!read_all(s->stamp_path, stamp, 16) || stamp[0] != sequence)) return;
-    if (!read_all(s->path, s->pixels + (slot + 1) * 640 * 512, 640 * 512)) return;
+    if (control.tracker && (!read_all(s->stamp_path, stamp, 16) || stamp[0] != sequence)) return 0;
+    if (!read_all(s->path, s->pixels + (slot + 1) * 640 * 512, 640 * 512)) return 0;
     s->history_times[slot] = now_ms();
     s->history_capture_ns[slot] = stamp[1];
     s->history_sequences[slot] = sequence;
@@ -230,7 +244,7 @@ static void refresh_source(Source *s) {
     s->history_next = (slot + 1) & 15;
     if (s->history_count < 16) s->history_count++;
   }
-  if (!s->history_count) return;
+  if (!s->history_count) return 0;
   Q target = now_ms() - control.delay_ms;
   int best = -1, oldest = 0, index;
   for (index = 0; index < (int)s->history_count; index++) {
@@ -240,8 +254,8 @@ static void refresh_source(Source *s) {
   }
   if (best < 0) best = oldest;
   sequence = s->history_sequences[best];
-  if (s->has_sequence && sequence == s->sequence) return;
-  if (control.tracker && !capture_pose(s, s->history_capture_ns[best])) return;
+  if (s->has_sequence && sequence == s->sequence) return 0;
+  if (control.tracker && !capture_pose(s, s->history_capture_ns[best])) return 0;
   unsigned char *pixels = s->pixels + (best + 1) * 640 * 512;
   U hash = 2166136261U;
   int sample;
@@ -271,6 +285,38 @@ static void refresh_source(Source *s) {
     s->upload_filter = control.filter_mode + 1;
   }
   glTexSubImage2D(0x0de1, 0, 0, 0, 640, 512, 0x1903, 0x1401, pixels);
+  s->range_low = low; s->range_scale = scale;
+  s->sequence = sequence;
+  s->has_sequence = 1;
+  s->uploads++;
+  return 1;
+}
+
+static void image_pose_delta(const Source *s, float *top, float *bottom) {
+  float inverse[4]; int row, i;
+  for (row = 0; row < 2; row++) {
+    const float *q = s->native_pose + row * 4;
+    for (i = 0; i < 3; i++) inverse[i] = -q[i];
+    inverse[3] = q[3];
+    multiply_quaternion(s->camera_pose, inverse, row ? bottom : top);
+  }
+  float dot = 0;
+  for (i = 0; i < 4; i++) dot += top[i] * bottom[i];
+  if (dot < 0) for (i = 0; i < 4; i++) bottom[i] = -bottom[i];
+}
+
+static void refresh_source(Source *s, int poll) {
+  int uploaded = poll ? poll_source(s) : 0;
+  if ((!uploaded && !s->remap_dirty) || !s->has_sequence) return;
+  if (control.tracker && control.pose_method == POSE_IMAGE) {
+    float top[4], bottom[4];
+    if (!s->pose_valid || !s->native_valid) return;
+    image_pose_delta(s, top, bottom);
+    glUniform4f(control.warp_top_location, top[0], top[1], top[2], top[3]);
+    glUniform4f(control.warp_bottom_location, bottom[0], bottom[1], bottom[2], bottom[3]);
+    glUniform1i(control.warp_eye_location, (int)(s - control.sources));
+  }
+  glBindTexture(0x0de1, s->upload_texture);
   if (s->map_texture) {
     glActiveTexture(0x84ce);
     glBindTexture(0x0de1, s->map_texture);
@@ -279,7 +325,7 @@ static void refresh_source(Source *s) {
   glFramebufferTexture2D(0x8ca9, 0x8ce0, control.antialias_program ? 0x0de1 : 0x8d65,
       control.antialias_program ? s->antialias_texture : s->yuv_texture, 0);
   if (glCheckFramebufferStatus(0x8ca9) != 0x8cd5) { fail(); return; }
-  glUniform2f(control.range_location, low, scale);
+  glUniform2f(control.range_location, s->range_low, s->range_scale);
   glDrawArrays(4, 0, 3);
   if (control.antialias_program) {
     glUseProgram(control.antialias_program);
@@ -291,13 +337,12 @@ static void refresh_source(Source *s) {
     glUseProgram(control.program);
   }
   if (glGetError() != 0) { fail(); return; }
-  s->sequence = sequence;
-  s->has_sequence = 1;
   s->valid = 1;
-  s->uploads++;
+  s->remap_dirty = 0;
+  s->remaps++;
 }
 
-static void refresh(void) {
+static void refresh(int eye, int poll) {
   const U caps[] = {0x0be2, 0x0b71, 0x0b44, 0x0b90, 0x0c11, 0x8c89, 0x809e, 0x80a0};
   int viewport[4], i;
   unsigned char enabled[8], mask[4];
@@ -331,8 +376,8 @@ static void refresh(void) {
     glViewport(0, 0, control.width, control.height);
     glColorMask(1, 1, 1, 1);
     for (i = 0; i < 8; i++) glDisable(caps[i]);
-    refresh_source(&control.sources[0]);
-    if (control.enabled) refresh_source(&control.sources[1]);
+    if (eye < 0 || eye == 0) refresh_source(&control.sources[0], poll);
+    if (control.enabled && (eye < 0 || eye == 1)) refresh_source(&control.sources[1], poll);
     control.refreshes++;
   }
 
@@ -369,6 +414,41 @@ static int validate_pose_layout(U program) {
   for (i = 0; i < 4; i++) if (offsets[i] != 2912 + i*16 || blocks[i] != blocks[0]) return 0;
   glGetActiveUniformBlockiv(program, blocks[0], 0x8a3f, &binding);
   return binding == 0;
+}
+
+/* Image correction only reads the currently bound camera rows. Never cache a
+ * native pointer across draws: the runtime can reallocate a buffer name. */
+static int read_native_pose(Source *source) {
+  int buffer = 0, old = integer(0x8a28), capacity = 0, flags = 0, i;
+  long long start = 0, size = 0;
+  unsigned char *pointer = 0;
+  float rows[8];
+  glGetIntegeri_v(0x8a28, 0, &buffer);
+  glGetInteger64i_v(0x8a29, 0, &start);
+  glGetInteger64i_v(0x8a2a, 0, &size);
+  if (!buffer || size != 3184) { fail(); return 0; }
+  glBindBuffer(0x8a11, buffer);
+  glGetBufferPointerv(0x8a11, 0x88bd, (void **)&pointer);
+  glGetBufferParameteriv(0x8a11, 0x8764, &capacity);
+  glGetBufferParameteriv(0x8a11, 0x911f, &flags);
+  glBindBuffer(0x8a11, old);
+  if (!pointer || (flags & 0xc0) != 0xc0 || start < 0 || start+3184 > capacity) {
+    fail(); return 0;
+  }
+  for (i = 0; i < 8; i++) rows[i] = *(float *)(pointer + start + 2912 + (i/4)*32 + (i%4)*4);
+  for (i = 0; i < 2; i++) {
+    float *q = rows+i*4;
+    float norm = q[0]*q[0]+q[1]*q[1]+q[2]*q[2]+q[3]*q[3];
+    if (!(norm > 0.99f && norm < 1.01f)) { fail(); return 0; }
+  }
+  for (i = 0; i < 8; i++) if (rows[i] != source->native_pose[i]) break;
+  if (!source->native_valid || i != 8) {
+    for (i = 0; i < 8; i++) source->native_pose[i] = rows[i];
+    source->native_valid = 1;
+    source->remap_dirty = 1;
+    source->native_changes++;
+  }
+  return 1;
 }
 
 static const int camera_offsets[14] = {
@@ -508,7 +588,7 @@ void on_enter(GumInvocationContext *ic) {
   if (now - control.heartbeat > 4000) control.enabled = 0;
   if (!control.enabled) {
     if (!control.cleaned) {
-      if (control.pose_direct) restore_direct_poses();
+      if (control.pose_method == POSE_DIRECT) restore_direct_poses();
       int j;
       for (j = 0; j < 32; j++) if (control.pose_fences[j]) {
         glDeleteSync(control.pose_fences[j]); control.pose_fences[j] = 0;
@@ -545,10 +625,18 @@ void on_enter(GumInvocationContext *ic) {
   else if (scissor[0] >= middle) eye = 1;
   else return;
   if (control.swap_eyes) eye = 1 - eye;
-  if (now - control.last_refresh >= 12) { refresh(); control.last_refresh = now; }
   Source *source = &control.sources[eye];
+  if (control.tracker && control.pose_method == POSE_IMAGE) {
+    if (!read_native_pose(source)) return;
+    int poll = now - source->last_poll >= 12;
+    if (poll || source->remap_dirty) refresh(eye, poll);
+    if (poll) source->last_poll = now;
+  } else if (now - control.last_refresh >= 12) { refresh(-1, 1); control.last_refresh = now; }
   if (!control.enabled || !source->valid) return;
-  if (control.tracker && !(control.pose_direct ? write_ir_pose(source, call) : bind_ir_pose(source, call))) return;
+  if (control.tracker) {
+    if (control.pose_method == POSE_IMAGE) control.pose_draws++;
+    else if (!(control.pose_method ? write_ir_pose(source, call) : bind_ir_pose(source, call))) return;
+  }
   glGetUniformiv(program, location, &call->unit);
   call->active = integer(0x84e0);
   glActiveTexture(0x84c0 + call->unit);

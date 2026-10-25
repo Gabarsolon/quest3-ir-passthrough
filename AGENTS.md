@@ -20,3 +20,6 @@
   does not make it visible on the user's desktop. The user launches
   `python tools/live_viewer.py`; its measurements are written once per second to
   `%TEMP%/quest3-ir-viewer/viewer-stats.json`.
+- Frida CModule data is read-only. Allocate writable native globals in JavaScript
+  with `Memory.alloc`, declare them `extern` in C, and pass their addresses as
+  imports. Mutable static C arrays caused a diagnostic compositor crash.

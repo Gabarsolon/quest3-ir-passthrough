@@ -198,6 +198,8 @@ def run(options):
     worker.start()
     readers, frida_pid, session, script = [], None, None, None
     mode_session, mode_script = None, None
+    keepalive_stop = threading.Event()
+    keepalive_scripts = []
     log_dir = Path(tempfile.gettempdir()) / "quest3-ir-system"
     log_dir.mkdir(exist_ok=True)
     log = (log_dir / "system-passthrough.jsonl").open("a", encoding="utf-8")
@@ -217,6 +219,22 @@ def run(options):
         elif payload.get("kind") == "ready":
             print("Compositor hook ready; waiting for IR to be drawn.", flush=True)
 
+    def keepalive():
+        # Discovery and calibration transfer can exceed the watchdog interval
+        # over Wi-Fi. Keep both scripts alive throughout startup and normal use.
+        while not keepalive_stop.wait(0.5):
+            try:
+                for active in tuple(keepalive_scripts):
+                    active.exports_sync.heartbeat()
+            except Exception as exc:
+                if not keepalive_stop.is_set():
+                    state.update(status="error", error="Heartbeat failed: " + str(exc))
+                    print("Heartbeat failed:", exc, flush=True)
+                    stop.set()
+                return
+
+    keeper = threading.Thread(target=keepalive, daemon=True)
+    keeper.start()
     try:
         build = adb.shell("getprop ro.build.version.incremental").decode().strip()
         if build != SUPPORTED_BUILD:
@@ -232,11 +250,15 @@ def run(options):
         upload_ram(build_reader(), DIRECTORY + "/irfeed")
         calibration_maps = None
         camera_poses = None
+        warp_parameters = None
         if not options.no_calibration:
-            from ir_calibration import make_maps, camera_pose_parameters
+            from ir_calibration import make_maps, camera_pose_parameters, image_warp_parameters
             calibration = json.loads(root("cat /persist/calibration/camera_calibration.json"))
-            calibration_maps = make_maps(calibration)
+            image_warp = options.pose_correction and options.pose_method == "image"
+            calibration_maps = make_maps(calibration, rays_only=image_warp)
             camera_poses = camera_pose_parameters(calibration)
+            if image_warp:
+                warp_parameters = image_warp_parameters(calibration)
             print("Factory IR/RGB ray maps calculated for both eyes.", flush=True)
         adb.forward("tcp:27042", "tcp:27042")
         manager = frida.get_device_manager()
@@ -275,6 +297,7 @@ def run(options):
                 raise RuntimeError("Could not read the original tracking mode.")
             frequency = None if options.frequency == "auto" else int(options.frequency)
             state["tracking_mode"] = mode_script.exports_sync.activate(match[1], frequency)
+            keepalive_scripts.append(mode_script)
             print("Tracking mode:", state["tracking_mode"], flush=True)
             time.sleep(0.4)
 
@@ -322,18 +345,23 @@ def run(options):
                     "filter": options.filter,
                     "sgsrSharpness": options.sgsr_sharpness,
                     "antialiasing": options.aa,
-                    "cameraPoses": camera_poses}
+                    "cameraPoses": camera_poses, "warpParameters": warp_parameters}
         source = ("const OPTIONS=" + json.dumps(settings) + ";\nconst C_SOURCE="
                   + json.dumps((HERE / "system_passthrough.c").read_text()) + ";\n"
                   + "const SGSR_SOURCE=" + json.dumps((HERE / "vendor" / "sgsr1" / "mono.glsl").read_text()) + ";\n"
                   + "const AA_SOURCE=" + json.dumps((HERE / "ir_antialias.glsl").read_text()) + ";\n"
+                  + "const WARP_SOURCE=" + json.dumps((HERE / "ir_pose_warp.glsl").read_text()) + ";\n"
                   + (HERE / "system_passthrough.js").read_text())
         script = session.create_script(source)
         script.on("message", message)
         script.load()
+        keepalive_scripts.append(script)
         if calibration_maps:
             for eye, mapping in enumerate(calibration_maps):
-                script.exports_sync.setmap(eye, mapping)
+                for offset in range(0, len(mapping), 128 * 1024):
+                    if stop.is_set():
+                        raise RuntimeError(state.get("error", "Startup was stopped."))
+                    script.exports_sync.setmapchunk(eye, offset, mapping[offset:offset + 128 * 1024])
         print("Keep normal Quest passthrough enabled. Ctrl+C or --stop restores RGB.", flush=True)
         started = time.monotonic()
         announced = False
@@ -341,7 +369,6 @@ def run(options):
         stale_checks = 0
         last_reader_check = time.monotonic()
         while not stop.wait(0.5):
-            script.exports_sync.heartbeat()
             requested_delay = state.get("requested_delay_ms", options.ir_delay_ms)
             if requested_delay != options.ir_delay_ms:
                 options.ir_delay_ms = requested_delay
@@ -355,7 +382,6 @@ def run(options):
                 options.filter = requested_filter
                 script.exports_sync.setfilter(options.filter)
             if mode_script:
-                mode_script.exports_sync.heartbeat()
                 state["tracking_mode"].update(mode_script.exports_sync.status())
             stats = script.exports_sync.stats()
             state.update(stats)
@@ -385,6 +411,8 @@ def run(options):
         pass
     finally:
         state["status"] = "restoring RGB"
+        keepalive_stop.set()
+        keeper.join(timeout=2)
         if script:
             try:
                 script.exports_sync.stop()
@@ -446,8 +474,8 @@ def main():
     poses.add_argument("--no-pose-correction", dest="pose_correction", action="store_false",
                        help="Disable historical pose correction for diagnostics.")
     parser.set_defaults(pose_correction=None)
-    parser.add_argument("--pose-method", choices=["shadow", "direct"], default="direct",
-                        help="Historical pose write strategy; direct changes only the runtime camera fields.")
+    parser.add_argument("--pose-method", choices=["image", "shadow", "direct"], default="image",
+                        help="Default image corrects only our IR pixels. Legacy shadow/direct modes caused rendering artifacts.")
     parser.add_argument("--pose-age-ms", type=int, default=8, help="Estimated exposure age before the last observed DMA change; default 8 ms.")
     parser.add_argument("--frequency", choices=["auto", "50", "60"], default="60",
                         help="Temporary utility frequency for fast hands mode; restored on stop. Default 60 Hz.")

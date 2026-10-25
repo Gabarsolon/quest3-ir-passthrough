@@ -84,9 +84,8 @@ def project(camera, rays):
     return np.stack((f*x+cx, f*y+cy), axis=-1)
 
 
-def make_maps(calibration, width=640, height=512):
+def calibrated_pairs(calibration):
     cameras = {str(c['Id']): c for c in calibration['CameraCalibration']}
-    maps = []
     for ir_id, rgb_id in [('0', '4'), ('1', '5')]:
         ir, rgb = cameras[ir_id], cameras[rgb_id]
         for camera in [ir, rgb]:
@@ -95,9 +94,35 @@ def make_maps(calibration, width=640, height=512):
                 raise ValueError('Unsupported factory calibration model')
         if ir['ImageSize'] != [1280, 1024] or rgb['ImageSize'] != [2328, 1748]:
             raise ValueError('Unexpected calibrated sensor dimensions')
+        yield ir, rgb
+
+
+def image_warp_parameters(calibration):
+    """Factory constants for the image-space Fisheye62 projection shader."""
+    result = []
+    for ir, rgb in calibrated_pairs(calibration):
+        ir_pose = np.asarray(ir['DeviceFromCamera']).reshape(4, 4)
+        rgb_pose = np.asarray(rgb['DeviceFromCamera']).reshape(4, 4)
+        rotation = ir_pose[:3, :3].T @ rgb_pose[:3, :3]
+        result.append(dict(rotation=rotation.T.ravel().tolist(),
+                           projection=ir['Projection']['Coefficients'],
+                           distortion=ir['Distortion']['Coefficients'],
+                           size=ir['ImageSize']))
+    return result
+
+
+def make_maps(calibration, width=640, height=512, *, rays_only=False):
+    """Static IR UVs, or RGB ray slopes for an independently moving IR image."""
+    maps = []
+    for ir, rgb in calibrated_pairs(calibration):
         cols, rows = np.meshgrid((np.arange(width)+0.5)/width,
                                  (np.arange(height)+0.5)/height)
         rays = unproject(rgb, cols*2328, rows*1748)
+        if rays_only:
+            if not np.isfinite(rays).all() or np.any(rays[..., 2] <= 1e-6):
+                raise ValueError('RGB ray map exceeds the forward hemisphere')
+            maps.append((rays[..., :2]/rays[..., 2:]).astype('<f4').tobytes())
+            continue
         ir_pose = np.asarray(ir['DeviceFromCamera']).reshape(4, 4)
         rgb_pose = np.asarray(rgb['DeviceFromCamera']).reshape(4, 4)
         rotation = ir_pose[:3, :3].T @ rgb_pose[:3, :3]

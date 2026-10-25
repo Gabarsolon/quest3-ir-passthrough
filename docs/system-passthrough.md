@@ -7,9 +7,16 @@ the earlier severe flicker, and correct hand/silhouette alignment after calibrat
 
 ## Run
 
-Requirements on this setup: authorized USB with the ADB server running, temporary
+Requirements on this setup: an authorized ADB connection with the server running, temporary
 root already active, Python with `frida==17.17.0` and NumPy, and LLVM clang.
 Firmware build `51154110174900520` is the only accepted build.
+
+Wireless ADB is selected by the host-only `QUEST3_ADB_SERIAL` environment value,
+then `%LOCALAPPDATA%/quest3-ir/adb-target.txt`, falling back to the USB serial.
+`--serial IP:PORT` overrides the target. No persistent headset ADB property is set.
+Enable a temporary TCP transport before restoring root: restarting ADB afterward
+can terminate the temporary su daemon. The saved root payload requires Wi-Fi off
+during exploitation; enable Wi-Fi after successful root recovery.
 
 ```powershell
 python C:\Users\remus\quest3-ir-passthrough\tools\system_passthrough.py
@@ -43,13 +50,21 @@ available as an explicit option.
 It queries historical tracking at each IR publication's observed DMA time,
 with an estimated exposure offset (`--pose-age-ms 8`, adjustable live with
 `--set-pose-age 8`). This observed time is not a hardware exposure timestamp.
-The first per-draw upload implementation added rendering overhead and caused
-black rectangles/flicker. The optimized mapped-buffer implementation removed
-those artifacts from the room image. Combined with the 60 Hz camera mode, the
-user confirmed smoother motion and no flicker even at the bright window.
-The subsequent direct camera-field correction also removed the menu tearing;
-the user confirmed both the menu and IR motion are correct. This method is now
-the default. The low-resolution source still limits image detail.
+The earlier shadow/direct pose-buffer implementations initially looked smooth,
+but black rectangles/flickering later recurred in the room and menus. A fenced
+direct-write experiment and a GPU-copy experiment also failed visually despite
+passing mocked checks and reporting no GL errors. A controlled no-pose run
+restored a full room without rectangles, with the expected head-motion lag.
+
+The new default `--pose-method image` rotates our IR pixels into the native
+RGB capture orientation. It reads the native camera-row rotations without
+writing or substituting the runtime uniform buffer. Native eye/menu/depth data
+stay intact. The first 15-second live run and automatic RGB cleanup succeeded;
+a subsequent run held 90Hz display rendering, zero GL/pose errors and about
+58 changed image samples/sec per eye. These counters do not establish visual
+correctness: feedback on motion and rectangles is still pending. The low-resolution
+source still limits image detail. `shadow` and `direct` remain explicit legacy
+diagnostics with known rendering artifacts.
 
 Image reconstruction can be selected at launch with `--filter linear|cubic|sgsr`
 or changed live with `--set-filter linear|cubic|sgsr`. Linear is the default;
@@ -142,14 +157,15 @@ Relevant GL state is saved and restored around our uploads and draws.
 The pose correction uses the checked firmware's v9 historical head
 tracking query. Factory camera extrinsics convert the historical head pose into
 the remapped camera pose. Both row poses are identical for the IR global shutter.
-The default direct method writes only the fourteen camera quaternion/translation
-floats in existing coherent mapped runtime shader buffers. It preserves the
-runtime's other shader data and buffer bindings. Uniform offsets, mapping flags,
-range and capacity are checked first. Stop restores saved camera fields only if
-the mapping and last written values still match, allowing newer native updates
-to take precedence. Camera image buffers remain read-only. `--pose-method shadow`
-retains the earlier owned-buffer implementation for diagnosis; it caused menu
-tearing despite smooth room motion and is not the recommended method.
+The image method uses `q_IR_from_world * inverse(q_native_RGB_from_world)` to
+rotate a native RGB ray into the IR capture orientation. A per-eye RG32F lookup
+stores unprojected RGB ray slopes. Our shader rotates these rays and applies the
+factory IR Fisheye62 projection. Top/bottom native rows use sign-aligned normalized
+quaternion interpolation. When native camera rows change, our remap can be redrawn
+using the same IR upload; image uploads, remaps and native pose changes have
+separate counters. Uniform offsets, live mapping, range and capacity are checked
+before reading; native buffers are never written or rebound to replacement storage
+by this method. Legacy direct/shadow code remains for diagnostics only.
 
 `ir_calibration.py` reads the existing factory camera calibration without
 modifying it. It generates a separate RGB-to-IR ray lookup for each eye using
@@ -224,9 +240,10 @@ Despite the measured 60 Hz camera and texture updates, the user reported very
 poor apparent frame rate during head motion and persistent pixelation. The
 runtime logged 72 Hz rendering with roughly 1.8 ms timewarp and no sustained
 stale frames. These measurements do not establish smooth passthrough motion.
-Historical pose correction subsequently fixed the head-motion problem, and the
-direct camera-field method fixed the menu regression from the shadow-buffer
-method. The user confirmed both. The source stream remains640x512; a larger
+Historical pose correction initially improved the head-motion problem, and the
+direct camera-field method initially cleared the menu regression from the
+shadow-buffer method. Rectangles later recurred; the image method above replaces
+these buffer-based approaches. The source stream remains640x512; a larger
 remap texture cannot add captured detail.
 Two color ISP contexts completed about 72 unique requests/sec on this setup.
 That is a processing-cadence measurement, not a verified 120 fps RGB sensor mode.
