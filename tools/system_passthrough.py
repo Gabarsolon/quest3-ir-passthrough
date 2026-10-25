@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import shlex
 import shutil
 import socket
@@ -28,6 +29,10 @@ HERE = Path(__file__).resolve().parent
 DIRECTORY = "/dev/quest3-ir-session/system"
 CONTROL_PORT = 27343
 SUPPORTED_BUILD = "51154110174900520"
+MIN_FRIDA_VERSION = (17, 23, 0)
+# Leave room for the RPC envelope under Frida 17.24.x's 128 KiB incoming
+# WebSocket message limit. A 128 KiB binary chunk exceeds it with overhead.
+CALIBRATION_CHUNK_BYTES = 64 * 1024
 
 
 @contextmanager
@@ -105,6 +110,89 @@ def upload_ram(data, path):
         raise RuntimeError("RAM executable checksum did not match.")
     root("chmod 0755 " + shlex.quote(temporary) + " && mv "
          + shlex.quote(temporary) + " " + shlex.quote(path))
+
+
+def prepare_frida_server(host_path, version):
+    """Stage a matching server in tmpfs; preserve the existing userdata helper."""
+    target = DIRECTORY + "/frida-server"
+    current = root(f"if [ -x {target} ]; then {target} --version; fi")
+    if host_path is None and current == version:
+        return target
+    if host_path is None:
+        saved = root("if [ -x /data/local/tmp/frida-server ]; then "
+                     "/data/local/tmp/frida-server --version; fi")
+        if saved != version:
+            raise RuntimeError("A matching Frida server is required. Run tools/update_frida_runtime.ps1, "
+                               "then tools/run_ir.ps1; the saved userdata helper is left unchanged.")
+        data = None
+    else:
+        data = Path(host_path).read_bytes()
+        if (len(data) < 20 or data[:5] != b"\x7fELF\x02"
+                or data[18:20] != b"\xb7\x00"):
+            raise RuntimeError("Frida server must be an AArch64 ELF executable.")
+        digest = hashlib.sha256(data).hexdigest()
+        existing = root(f"if [ -f {target} ]; then sha256sum {target}; fi")
+        if current == version and existing.split()[:1] == [digest]:
+            return target
+    # The exclusive controller port is already held. Only stop a daemon whose
+    # executable belongs to our RAM directory; never restart adbd or su.
+    for pid in root("pidof frida-server 2>/dev/null || true").split():
+        executable = root(f"readlink /proc/{int(pid)}/exe")
+        if executable.removesuffix(" (deleted)") == target:
+            stop_owned_process(int(pid), target)
+    if data is None:
+        root(f"cp /data/local/tmp/frida-server {target}\nchmod 0755 {target}")
+    else:
+        incoming = DIRECTORY + "/upload-" + secrets.token_hex(8)
+        temporary = incoming + "/server"
+        root(f"mkdir -m 0700 {incoming}")
+        listener_pid = None
+        try:
+            # Android's ADB sync service cannot fchown a file under /dev as
+            # shell, and this su helper disconnects stdin. A one-shot localhost
+            # receiver gets a bounded input over the existing ADB transport.
+            # Its child inherits the socket directly, and the directory stays
+            # root-only. A unique greeting is checked before sending anything.
+            greeting = ("IR_UPLOAD_" + incoming.rsplit('-', 1)[1] + "\n").encode()
+            command = ("printf " + shlex.quote(greeting.decode())
+                       + f"; head -c {len(data)} > {temporary} && printf IR_UPLOAD_OK")
+            listener_pid = int(root("setsid /system/bin/toybox nc -s 127.0.0.1 -p 27344 -l -w 10 sh -c "
+                                    + shlex.quote(command) + f" </dev/null >{incoming}/upload.log 2>&1 &\necho $!"))
+            stream = None
+            for attempt in range(20):
+                try:
+                    stream = adb.connect("tcp:27344", timeout=30)
+                    break
+                except RuntimeError:
+                    time.sleep(0.1)
+            if stream is None:
+                raise RuntimeError("RAM upload receiver did not start.")
+            with stream:
+                if adb.readn(stream, len(greeting)) != greeting:
+                    raise RuntimeError("Unexpected RAM upload receiver.")
+                stream.sendall(data)
+                chunks = []
+                while True:
+                    chunk = stream.recv(4096)
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+            if b"".join(chunks).strip() != b"IR_UPLOAD_OK":
+                raise RuntimeError("RAM Frida server upload did not complete.")
+            actual = root("sha256sum " + temporary).split()[0]
+            if actual != digest:
+                raise RuntimeError("RAM Frida server checksum did not match.")
+            root(f"chmod 0755 {temporary}\nmv {temporary} {target}")
+        finally:
+            if listener_pid:
+                executable = root(f"if [ -r /proc/{listener_pid}/exe ]; then readlink /proc/{listener_pid}/exe; fi")
+                if executable == "/system/bin/toybox":
+                    stop_owned_process(listener_pid, incoming)
+            root(f"rm -f {temporary} {incoming}/upload.log\nrmdir {incoming}")
+    actual_version = root(target + " --version")
+    if actual_version != version:
+        raise RuntimeError(f"Frida server version {actual_version!r} does not match host {version}.")
+    return target
 
 
 def cleanup_orphan_readers():
@@ -210,8 +298,12 @@ class ControlHandler(socketserver.StreamRequestHandler):
 def run(options):
     import frida
 
+    if tuple(map(int, frida.__version__.split('.')[:3])) < MIN_FRIDA_VERSION:
+        raise RuntimeError("Frida 17.23.0 or newer is required for the ARM64 online-hook fix. "
+                           "Run tools/update_frida_runtime.ps1, then tools/run_ir.ps1.")
     stop = threading.Event()
-    state = {"status": "starting", "host_pid": os.getpid(), "serial": adb.SERIAL}
+    state = {"status": "starting", "host_pid": os.getpid(), "serial": adb.SERIAL,
+             "fridaVersion": frida.__version__}
     try:
         server = socketserver.ThreadingTCPServer(("127.0.0.1", CONTROL_PORT), ControlHandler)
     except OSError as exc:
@@ -229,6 +321,8 @@ def run(options):
     log = (log_dir / "system-passthrough.jsonl").open("a", encoding="utf-8")
 
     def message(item, data):
+        if log.closed:
+            return
         log.write(json.dumps({"time": time.time(), **item}) + "\n")
         log.flush()
         payload = item.get("payload", {})
@@ -289,6 +383,7 @@ def run(options):
             if image_warp:
                 warp_parameters = image_warp_parameters(calibration)
             print("Factory IR/RGB ray maps calculated for both eyes.", flush=True)
+        target = prepare_frida_server(options.frida_server, frida.__version__)
         adb.forward("tcp:27042", "tcp:27042")
         manager = frida.get_device_manager()
         device = manager.add_remote_device("127.0.0.1:27042")
@@ -296,11 +391,6 @@ def run(options):
         try:
             session = device.attach(compositor)
         except (frida.ServerNotRunningError, frida.TransportError):
-            target = DIRECTORY + "/frida-server"
-            root("cp /data/local/tmp/frida-server " + target + "\nchmod 0755 " + target)
-            version = root(target + " --version")
-            if version != frida.__version__:
-                raise RuntimeError(f"Frida versions differ: host {frida.__version__}, device {version}.")
             frida_pid = int(root(f"TMPDIR={DIRECTORY} setsid {target} -l 127.0.0.1:27042 "
                                 f"</dev/null >{DIRECTORY}/frida.log 2>&1 &\necho $!").splitlines()[-1])
             manager.remove_remote_device("127.0.0.1:27042")
@@ -313,6 +403,9 @@ def run(options):
                     time.sleep(0.2)
             if session is None:
                 raise RuntimeError("RAM Frida server did not start.")
+        session.on("detached", lambda reason, crash: message({
+            "type": "send", "payload": {"kind": "session-detached", "reason": str(reason),
+                                          "crash": str(crash) if crash else None}}, None))
 
         if not options.no_fast_mode:
             fidelity_pid = int(adb.shell("pidof trackingfidelityservice").decode().strip())
@@ -372,11 +465,13 @@ def run(options):
                     "poseCorrection": options.pose_correction, "poseAgeMs": options.pose_age_ms,
                     "poseMethod": options.pose_method,
                     "filter": options.filter,
+                    "brightness": options.brightness,
                     "sgsrSharpness": options.sgsr_sharpness,
                     "antialiasing": options.aa,
                     "cameraPoses": camera_poses, "warpParameters": warp_parameters}
         source = ("const OPTIONS=" + json.dumps(settings) + ";\nconst C_SOURCE="
                   + json.dumps((HERE / "system_passthrough.c").read_text()) + ";\n"
+                  + "const CONTEXT_SOURCE=" + json.dumps((HERE / "system_contexts.c").read_text()) + ";\n"
                   + "const SGSR_SOURCE=" + json.dumps((HERE / "vendor" / "sgsr1" / "mono.glsl").read_text()) + ";\n"
                   + "const AA_SOURCE=" + json.dumps((HERE / "ir_antialias.glsl").read_text()) + ";\n"
                   + "const WARP_SOURCE=" + json.dumps((HERE / "ir_pose_warp.glsl").read_text()) + ";\n"
@@ -387,10 +482,10 @@ def run(options):
         keepalive_scripts.append(script)
         if calibration_maps:
             for eye, mapping in enumerate(calibration_maps):
-                for offset in range(0, len(mapping), 128 * 1024):
+                for offset in range(0, len(mapping), CALIBRATION_CHUNK_BYTES):
                     if stop.is_set():
                         raise RuntimeError(state.get("error", "Startup was stopped."))
-                    script.exports_sync.setmapchunk(eye, offset, mapping[offset:offset + 128 * 1024])
+                    script.exports_sync.setmapchunk(eye, offset, mapping[offset:offset + CALIBRATION_CHUNK_BYTES])
         print("Keep normal Quest passthrough enabled. Ctrl+C or --stop restores RGB.", flush=True)
         started = time.monotonic()
         announced = False
@@ -449,6 +544,10 @@ def run(options):
                     if script.exports_sync.stats()["cleaned"]:
                         break
                     time.sleep(0.05)
+                disposal = script.exports_sync.dispose()
+                if disposal["deferredGlContexts"]:
+                    print("Inactive context GL deletion deferred to native context/share lifetime:",
+                          len(disposal["deferredGlContexts"]), flush=True)
             except Exception as exc:
                 print("Hook cleanup:", exc, file=sys.stderr)
             try:
@@ -482,7 +581,16 @@ def run(options):
         state["status"] = "stopped"
         server.shutdown()
         server.server_close()
-        print("IR hook removed. Normal RGB capture is restored.", flush=True)
+        try:
+            current = adb.shell("pidof com.oculus.vrruntimeservice").decode().strip()
+            compositor_changed = session is not None and current != str(compositor)
+        except Exception:
+            compositor_changed = True
+        if compositor_changed:
+            print("IR controller stopped. The compositor exited/restarted or is unreachable; "
+                  "check normal RGB passthrough in the headset.", flush=True)
+        else:
+            print("IR hook removed. Normal RGB capture is restored.", flush=True)
 
 
 def main():
@@ -494,6 +602,8 @@ def main():
     commands.add_argument("--set-pose-age", type=int, metavar="MS", help="Change the running IR pose timestamp estimate.")
     commands.add_argument("--set-filter", choices=["linear", "cubic", "sgsr"], help="Change the running controller's IR reconstruction filter.")
     parser.add_argument("--serial", default=adb.SERIAL)
+    parser.add_argument("--frida-server", type=Path,
+                        help="Matching host Android ARM64 Frida server to stage in RAM. Existing userdata helpers are preserved.")
     parser.add_argument("--ir-delay-ms", type=int, default=0, help="Experimental frame delay, 0–200 ms; default 0.")
     parser.add_argument("--seconds", type=float, default=0, help="Stop automatically after this duration; default runs until Ctrl+C.")
     parser.add_argument("--rotate", type=int, choices=[0, 90, 180, 270], default=90,
@@ -518,6 +628,8 @@ def main():
                         help="GPU remap texture size; source IR remains 640x512. Default 1280x960.")
     parser.add_argument("--filter", choices=["linear", "cubic", "sgsr"], default="linear",
                         help="IR reconstruction filter; default linear. Cubic requires GL_IMG_texture_filter_cubic.")
+    parser.add_argument("--brightness", type=float, default=1.0,
+                        help="IR image brightness multiplier, 0 to 4; default 1.0. Applied after normalization; camera exposure is unchanged.")
     parser.add_argument("--sgsr-sharpness", type=float, default=1.5,
                         help="SGSR 1 edge sharpness, 1 to 2; default 1.5.")
     parser.add_argument("--aa", choices=["off", "edge"], default="off",
@@ -533,6 +645,8 @@ def main():
         parser.error("seconds must be nonnegative; zoom must be between 0.25 and 5")
     if not 1 <= options.sgsr_sharpness <= 2:
         parser.error("SGSR sharpness must be between 1 and 2")
+    if not 0 <= options.brightness <= 4:
+        parser.error("brightness must be a finite number between 0 and 4")
     if not 0 <= options.ir_delay_ms <= 200 or (options.set_delay is not None and not 0 <= options.set_delay <= 200):
         parser.error("delay must be between 0 and 200 ms")
     if not 0 <= options.pose_age_ms <= 100 or (options.set_pose_age is not None and not 0 <= options.set_pose_age <= 100):

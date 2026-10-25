@@ -9,6 +9,8 @@ extern int clock_gettime(int, Clock *);
 extern int open(const char *, int, ...);
 extern long read(int, void *, unsigned long);
 extern int close(int);
+extern void *eglGetCurrentContext(void);
+extern void *render_context;
 extern void glGetIntegerv(U, int *);
 extern void glGetBooleanv(U, unsigned char *);
 extern unsigned char glIsEnabled(U);
@@ -94,6 +96,9 @@ typedef struct {
   U antialias_program;
   int antialias_image_location;
   int warp_top_location, warp_bottom_location, warp_eye_location;
+  volatile U invalidate_cache;
+  U owner_calls;
+  U clip_count;
 } Control;
 
 extern Control control;
@@ -137,6 +142,7 @@ void set_resources(U program, U framebuffer, U left_upload, U right_upload,
 void heartbeat(void) { control.heartbeat = now_ms(); }
 void set_delay(U value) { if (value <= 200) control.delay_ms = value; }
 void set_filter(U value) { if (value <= 2) control.filter_mode = value; }
+void set_clip_count(U value) { if (value <= 8) control.clip_count = value; }
 void set_filter_location(int location) { control.filter_location = location; }
 void set_warp_locations(int top, int bottom, int eye) {
   control.warp_top_location = top;
@@ -168,6 +174,7 @@ void set_maps(U left, U right, int location) {
 }
 void stop(void) { control.enabled = 0; }
 void fail(void) { control.errors++; control.enabled = 0; }
+void invalidate_program_cache(void) { control.invalidate_cache = 1; }
 
 void stats(Q *out) {
   out[0] = control.enabled; out[1] = control.ready;
@@ -187,6 +194,7 @@ void stats(Q *out) {
   out[23] = control.sources[1].native_changes;
   out[24] = control.sources[0].image_frames;
   out[25] = control.sources[1].image_frames;
+  out[26] = control.owner_calls;
 }
 
 static int integer(U key) { int value; glGetIntegerv(key, &value); return value; }
@@ -347,16 +355,16 @@ static void refresh_source(Source *s, int poll) {
 }
 
 static void refresh(int eye, int poll) {
-  const U caps[] = {0x0be2, 0x0b71, 0x0b44, 0x0b90, 0x0c11, 0x8c89, 0x809e, 0x80a0};
+  const U caps[] = {0x0be2, 0x0b71, 0x0b44, 0x0b90, 0x0c11, 0x8c89, 0x809e, 0x80a0, 0x8e51};
   int viewport[4], i;
-  unsigned char enabled[8], mask[4];
+  unsigned char enabled[9], mask[4], clip_enabled[8];
   int active = integer(0x84e0), program = integer(0x8b8d);
   int framebuffer = integer(0x8ca6), unpack = integer(0x88ef);
   int alignment = integer(0x0cf5), row = integer(0x0cf2);
   int skip_rows = integer(0x0cf3), skip_pixels = integer(0x0cf4);
   glGetIntegerv(0x0ba2, viewport);
   glGetBooleanv(0x0c23, mask);
-  for (i = 0; i < 8; i++) enabled[i] = glIsEnabled(caps[i]);
+  for (i = 0; i < 9; i++) enabled[i] = glIsEnabled(caps[i]);
   glActiveTexture(0x84cf);
   int texture_2d = integer(0x8069), texture_external = integer(0x8d67);
   int image_sampler = integer(0x8919);
@@ -371,6 +379,12 @@ static void refresh(int eye, int poll) {
   glPixelStorei(0x0cf3, 0); glPixelStorei(0x0cf4, 0);
 
   if (!control.ready) initialize_resources();
+  /* initialize_resources discovers extension support. Snapshot clipping after
+   * that discovery, including on the very first remap in a new context. Our
+   * full-screen shader does not write gl_ClipDistance. Native window planes
+   * could otherwise discard its pixels and leave the YUV target unwritten. */
+  U clip_count = control.clip_count;
+  for (i = 0; i < (int)clip_count; i++) clip_enabled[i] = glIsEnabled(0x3000 + i);
   if (control.ready && control.enabled) {
     glBindFramebuffer(0x8ca9, control.framebuffer);
     glUseProgram(control.program);
@@ -379,7 +393,8 @@ static void refresh(int eye, int poll) {
     if (control.sources[0].map_texture) glUniform1i(control.map_location, 14);
     glViewport(0, 0, control.width, control.height);
     glColorMask(1, 1, 1, 1);
-    for (i = 0; i < 8; i++) glDisable(caps[i]);
+    for (i = 0; i < 9; i++) glDisable(caps[i]);
+    for (i = 0; i < (int)clip_count; i++) glDisable(0x3000 + i);
     if (eye < 0 || eye == 0) refresh_source(&control.sources[0], poll);
     if (control.enabled && (eye < 0 || eye == 1)) refresh_source(&control.sources[1], poll);
     control.refreshes++;
@@ -389,7 +404,10 @@ static void refresh(int eye, int poll) {
   glUseProgram(program);
   glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
   glColorMask(mask[0], mask[1], mask[2], mask[3]);
-  for (i = 0; i < 8; i++) { if (enabled[i]) glEnable(caps[i]); else glDisable(caps[i]); }
+  for (i = 0; i < 9; i++) { if (enabled[i]) glEnable(caps[i]); else glDisable(caps[i]); }
+  for (i = 0; i < (int)clip_count; i++) {
+    if (clip_enabled[i]) glEnable(0x3000 + i); else glDisable(0x3000 + i);
+  }
   glBindTexture(0x0de1, texture_2d);
   glBindTexture(0x8d65, texture_external);
   glActiveTexture(0x84ce);
@@ -403,7 +421,7 @@ static void refresh(int eye, int poll) {
 }
 
 typedef struct {
-  int active, texture, unit, replaced, ubo_replaced, ubo, generic_ubo, fence_block;
+  int active, texture, unit, replaced, ubo_replaced, ubo, generic_ubo, fence_block, owner_call;
   long long ubo_start, ubo_size;
 } Invocation;
 
@@ -602,26 +620,47 @@ static int bind_ir_pose(Source *source, Invocation *call) {
   return 1;
 }
 
+static void release_owned_resources(void) {
+  if (control.cleaned) return;
+  if (control.pose_method == POSE_DIRECT) restore_direct_poses();
+  int j;
+  for (j = 0; j < 32; j++) if (control.pose_fences[j]) {
+    glDeleteSync(control.pose_fences[j]); control.pose_fences[j] = 0;
+  }
+  if (control.pose_buffer) { glDeleteBuffers(1, &control.pose_buffer); control.pose_buffer = 0; }
+  release_resources(); control.cleaned = 1;
+}
+
+/* Also used just before an owning context is destroyed. Never delete GLuints
+ * through another context, even if it happens to use the same numeric names. */
+int cleanup_current(void) {
+  if (!render_context || eglGetCurrentContext() != render_context || control.owner_calls) return 0;
+  control.enabled = 0;
+  release_owned_resources();
+  return 1;
+}
+
 void on_enter(GumInvocationContext *ic) {
   Invocation *call = GUM_IC_GET_INVOCATION_DATA(ic, Invocation);
   call->replaced = 0;
   call->ubo_replaced = 0;
   call->fence_block = -1;
+  call->owner_call = 0;
+  if (!render_context || eglGetCurrentContext() != render_context) return;
+  call->owner_call = 1;
+  control.owner_calls++;
   Q now = now_ms();
   if (now - control.heartbeat > 4000) control.enabled = 0;
   if (!control.enabled) {
-    if (!control.cleaned) {
-      if (control.pose_method == POSE_DIRECT) restore_direct_poses();
-      int j;
-      for (j = 0; j < 32; j++) if (control.pose_fences[j]) {
-        glDeleteSync(control.pose_fences[j]); control.pose_fences[j] = 0;
-      }
-      if (control.pose_buffer) { glDeleteBuffers(1, &control.pose_buffer); control.pose_buffer = 0; }
-      release_resources(); control.cleaned = 1;
-    }
+    release_owned_resources();
     return;
   }
+  if (control.invalidate_cache) {
+    control.cache_count = 0;
+    control.invalidate_cache = 0;
+  }
   U program = integer(0x8b8d);
+  if (!program) return;
   int location = -1;
   U i;
   for (i = 0; i < control.cache_count; i++)
@@ -674,6 +713,10 @@ void on_enter(GumInvocationContext *ic) {
 
 void on_leave(GumInvocationContext *ic) {
   Invocation *call = GUM_IC_GET_INVOCATION_DATA(ic, Invocation);
+  if (!call->owner_call) return;
+  if (eglGetCurrentContext() != render_context) {
+    fail(); control.owner_calls--; return;
+  }
   if (call->ubo_replaced) {
     if (call->fence_block >= 0) control.pose_fences[call->fence_block] = glFenceSync(0x9117, 0);
     glBindBufferRange(0x8a11, 0, call->ubo, call->ubo_start, call->ubo_size);
@@ -684,4 +727,5 @@ void on_leave(GumInvocationContext *ic) {
     glBindTexture(0x8d65, call->texture);
     glActiveTexture(call->active);
   }
+  control.owner_calls--;
 }

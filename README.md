@@ -9,12 +9,13 @@ It runs in the shared system compositor; Virtual Desktop is not required.
 Normal system passthrough has been visually tested. Other applications and
 rendering layouts still need individual validation.
 
-**Known app-transition failure:** opening a flat Browser window has dropped the
-IR view; switching to Virtual Desktop produced a green right eye, diagonal
-rectangles/flicker, a freeze and an automatic headset reboot. The Home result
-does not establish app-transition stability. See the
-[crash investigation](docs/app-transition-crash.md). IR is currently left off
-while collecting post-reboot diagnostics.
+**App compatibility is experimental.** An earlier app transition caused green
+IR, rectangles and an automatic reboot. Per-context resources and protected IR
+outputs now pass a short Browser-over-Virtual-Desktop visual test. A later
+startup crash on Frida 17.17 prompted an isolated runtime upgrade. A two-minute
+17.24.3 run completed without a compositor restart; visual confirmation of
+repeated app switches is pending. See the
+[crash investigation](docs/app-transition-crash.md).
 
 ## Current result
 
@@ -45,15 +46,31 @@ and remain diagnostic options.
 ## Run
 
 Requirements: Quest 3 on build **51154110174900520** (Horizon OS v79), active
-temporary root, an authorized ADB connection, Python with NumPy and
-`frida==17.17.0`, and LLVM clang. Temporary root must already be established;
+temporary root, an authorized ADB connection, Python with NumPy, and LLVM clang.
+Frida **17.23 or newer** is required for its ARM64 online-hook improvement;
+the isolated setup below pins matching client/server **17.24.3**. Temporary root must already be established;
 the passthrough launcher does not run the exploit.
 
-From the repository in PowerShell, launch the preferred tested configuration:
+Prepare the isolated runtime once in normal PowerShell. It downloads official
+Frida packages to the laptop, verifies the server archive against the release's
+SHA-256 digest, and leaves global Python and existing headset helpers unchanged:
 
 ```powershell
-python .\tools\system_passthrough.py --display-refresh 120
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\update_frida_runtime.ps1
 ```
+
+Then launch from the repository:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_ir.ps1 --display-refresh 120
+```
+
+Add `--brightness 1.5` for a brighter IR image or `--brightness 0.7` for a dimmer
+one. The default is `1.0`; accepted multipliers are 0 through 4. This adjusts the
+IR pixels after normalization for this run, without changing camera exposure.
+The wrapper stages its matching server in `/dev/quest3-ir-session/system` on
+each boot as needed. It does not update the saved `/data/local/tmp` helper,
+restart ADB, or rerun root.
 
 Enable normal system passthrough. `IR ACTIVE` means the compositor has sampled
 the replacement textures. Keep the command running. Ctrl+C restores RGB;

@@ -1,0 +1,356 @@
+{
+  "build": "51154110174900520",
+  "method": "Bounded native glDrawElements observer; GL queries only, no binds/uploads or mapped-buffer reads. IR off.",
+  "contextIdentity": "Anonymous A/B labels preserve context equality across the original RGB baseline samples in one compositor process. Later restarted-process handles are not equated to these labels.",
+  "caution": "Draw counts are renderer observations, not camera frames per second. These traces identify a context transition; they do not prove the reboot cause.",
+  "samples": [
+    {
+      "app": "Home",
+      "durationSeconds": 3.0,
+      "observedDraws": 17440,
+      "matchedDraws": 15696,
+      "droppedStates": 0,
+      "errors": [],
+      "contexts": [
+        "A"
+      ],
+      "programs": [
+        41,
+        47,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60
+      ],
+      "samplerUnits": [
+        3,
+        4,
+        5
+      ],
+      "samplerTypes": [
+        "0x8be7"
+      ],
+      "uniformBufferSizes": [
+        3184
+      ],
+      "cameraUniformOffsets": [
+        [
+          2912,
+          2928,
+          2944,
+          2960
+        ]
+      ],
+      "viewports": [
+        [
+          0,
+          0,
+          4128,
+          2208
+        ]
+      ],
+      "scissors": [
+        [
+          0,
+          0,
+          2064,
+          1104
+        ],
+        [
+          0,
+          1104,
+          2064,
+          1104
+        ],
+        [
+          2064,
+          0,
+          2064,
+          1104
+        ],
+        [
+          2064,
+          1104,
+          2064,
+          1104
+        ]
+      ]
+    },
+    {
+      "app": "Browser flat PanelActivity",
+      "durationSeconds": 3.0,
+      "observedDraws": 17908,
+      "matchedDraws": 15624,
+      "droppedStates": 0,
+      "errors": [],
+      "contexts": [
+        "B"
+      ],
+      "programs": [
+        41,
+        48,
+        54,
+        55,
+        57,
+        58,
+        59,
+        60,
+        64,
+        66,
+        67
+      ],
+      "samplerUnits": [
+        3,
+        4,
+        5
+      ],
+      "samplerTypes": [
+        "0x8be7"
+      ],
+      "uniformBufferSizes": [
+        3184
+      ],
+      "cameraUniformOffsets": [
+        [
+          2912,
+          2928,
+          2944,
+          2960
+        ]
+      ],
+      "viewports": [
+        [
+          0,
+          0,
+          4128,
+          2208
+        ]
+      ],
+      "scissors": [
+        [
+          0,
+          0,
+          2064,
+          1104
+        ],
+        [
+          0,
+          1104,
+          2064,
+          1104
+        ],
+        [
+          2064,
+          0,
+          2064,
+          1104
+        ],
+        [
+          2064,
+          1104,
+          2064,
+          1104
+        ]
+      ]
+    },
+    {
+      "app": "Virtual Desktop",
+      "durationSeconds": 3.0,
+      "observedDraws": 17382,
+      "matchedDraws": 15588,
+      "droppedStates": 0,
+      "errors": [],
+      "contexts": [
+        "A"
+      ],
+      "programs": [
+        31,
+        103,
+        104
+      ],
+      "samplerUnits": [
+        2,
+        3,
+        4
+      ],
+      "samplerTypes": [
+        "0x8be7"
+      ],
+      "uniformBufferSizes": [
+        3184
+      ],
+      "cameraUniformOffsets": [
+        [
+          2912,
+          2928,
+          2944,
+          2960
+        ]
+      ],
+      "viewports": [
+        [
+          0,
+          0,
+          4128,
+          2208
+        ]
+      ],
+      "scissors": [
+        [
+          0,
+          0,
+          2064,
+          1104
+        ],
+        [
+          0,
+          1104,
+          2064,
+          1104
+        ],
+        [
+          2064,
+          0,
+          2064,
+          1104
+        ],
+        [
+          2064,
+          1104,
+          2064,
+          1104
+        ]
+      ]
+    },
+    {
+      "app": "Browser flat panel over Virtual Desktop",
+      "durationSeconds": 3.0,
+      "observedDraws": 22785,
+      "matchedDraws": 15624,
+      "droppedStates": 0,
+      "errors": [],
+      "contexts": [
+        "B"
+      ],
+      "programs": [
+        32,
+        72,
+        89,
+        90,
+        92,
+        117,
+        118,
+        119,
+        128,
+        132,
+        134,
+        135
+      ],
+      "samplerUnits": [
+        -1,
+        4,
+        5
+      ],
+      "samplerTypes": [
+        "0x0",
+        "0x8be7"
+      ],
+      "uniformBufferSizes": [
+        0,
+        3184
+      ],
+      "cameraUniformOffsets": [
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          2912,
+          2928,
+          2944,
+          2960
+        ]
+      ],
+      "viewports": [
+        [
+          0,
+          0,
+          4128,
+          2208
+        ]
+      ],
+      "scissors": [
+        [
+          0,
+          0,
+          2064,
+          1104
+        ],
+        [
+          0,
+          1104,
+          2064,
+          1104
+        ],
+        [
+          2064,
+          0,
+          2064,
+          1104
+        ],
+        [
+          2064,
+          1104,
+          2064,
+          1104
+        ]
+      ]
+    }
+  ],
+  "protectedContextObservation": {
+    "app": "Browser over Virtual Desktop",
+    "context": "B",
+    "eglProtectedContent": 1,
+    "glContextFlags": "0x10",
+    "clipDistancesSupported": 8,
+    "observedClipMasks": [
+      0,
+      7
+    ],
+    "alphaTestEnabled": false,
+    "sampleMaskEnabled": false,
+    "probe": "RGB-only context/raster queries; no protected image readback"
+  },
+  "validation": [
+    {
+      "configuration": "Per-context resources with protected YUV outputs; linear, AA off, brightness 1.2",
+      "app": "Browser over Virtual Desktop",
+      "boundedRunSeconds": 30,
+      "userResult": "IR is visible and stable in both eyes during gentle head motion",
+      "errorsAtSample": 0,
+      "poseFailuresAtSample": 0,
+      "normalRgbRestored": true
+    },
+    {
+      "configuration": "Isolated Frida 17.24.3, 64 KiB calibration chunks",
+      "boundedRunSeconds": 120,
+      "startupSucceeded": true,
+      "compositorStayedAlive": true,
+      "drawRedirect": "single ARM64 b instruction",
+      "reportedGlPoseErrors": 0,
+      "normalRgbRestored": true,
+      "repeatSwitchVisualFeedback": "pending"
+    }
+  ],
+  "remainingLimits": [
+    "Original app-transition reboot cause is not established.",
+    "Separate Frida 17.17 startup SIGSEGV prompted runtime update; this does not establish all earlier crash causes.",
+    "Dormant context GL objects may remain until native context/share-group destruction.",
+    "Protected edge-AA allocation is covered by a mocked allocator test; live visual validation pending."
+  ]
+}

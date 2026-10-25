@@ -25,7 +25,7 @@ failed first. They are not a GPU crash dump. The initial ADB inventory contained
 connected devices. Host stdout, stderr, settings and recent hook messages were
 preserved in the host temporary directory before any relaunch.
 
-No IR hook or exploit was restarted after this report. Reboot clears the temporary
+Initially no IR hook or exploit was restarted after this report. Reboot clears the temporary
 root and RAM hooks; the old detached controller has exited. The user subsequently
 confirmed that RGB passthrough, Browser and Virtual Desktop work normally with IR
 off. This implicates the hooked configuration without identifying a specific bug.
@@ -93,19 +93,84 @@ Desktop traces remain pending. The probe queried GL state without texture/buffer
 binds, uploads, native mapped-memory reads or camera changes, then detached.
 IR substitution remains off.
 
-## Concrete gaps to investigate
+## Context and protected-output investigation
 
-The hook intercepts `glDrawElements` throughout the compositor process. It caches
-program IDs and reuses owned textures/framebuffer resources without recording the
-EGL context that created them. Its eye/layout classification assumes a horizontal
-stereo viewport and scissor behavior validated in the Home trace. Program object
-lifetimes, additional contexts, different layer layouts, sampler variants and
-capture-mode transitions are not yet covered by app-transition validation.
+Bounded RGB-only traces of Home, flat Browser and Virtual Desktop found the same
+external YUV sampler type, 3184-byte camera UBO and offsets, 4128x2208 viewport
+and 2064x1104 scanout halves. Browser selected a different EGL context from
+Home/Virtual Desktop. Sanitized comparisons are in
+[app-context-layouts.json](../evidence/app-context-layouts.json).
 
-These are implementation gaps and hypotheses, not proof that context reuse
-caused this reboot. A green eye also does not establish a specific YUV/texture
-fault. The next useful evidence is the reboot reason, available crash/previous-boot
-logs and a bounded read-only baseline trace of each app's normal RGB rendering.
+The old hook had no context ownership guard. Resources, numeric GL object IDs,
+program locations and pose/frame caches are now separate per context. Relink,
+deletion and context-handle reuse invalidate the appropriate cache/lifetime.
+A 20-second Virtual Desktop test passed visually in both eyes, but Browser over
+Virtual Desktop still made the entire IR room green, despite zero GL/pose errors.
+
+Browser draws also enabled native clip distances. Disabling/restoring these and
+sample masking around our full-screen remap did not resolve the green room;
+those state-isolation changes remain appropriate for our shader, which does not
+write clip distances. Alpha test and sample masks were disabled in the normal
+RGB traces. The compatible viewport/UBO layout did not explain the failure.
+
+A subsequent context query returned `EGL_PROTECTED_CONTENT_EXT = 1` and
+`GL_CONTEXT_FLAGS = 0x10` for Browser's context. Our output buffers were allocated
+without protection. Protected fragment stages may read ordinary input images,
+but must write protected outputs; an invalid write need not produce a GL error.
+See [EGL_EXT_protected_content](https://registry.khronos.org/EGL/extensions/EXT/EGL_EXT_protected_content.txt)
+and [GL_EXT_protected_textures](https://registry.khronos.org/OpenGL/extensions/EXT/EXT_protected_textures.txt).
+This supplies a specific output-allocation defect, without proving the earlier
+headset reboot's cause.
+
+The renderer now queries each context's protection state. Its owned IR YUV
+AHardwareBuffers add `AHARDWAREBUFFER_USAGE_PROTECTED_CONTENT` and their EGLImages
+add the matching protection attribute when needed. Optional AA creates protected
+immutable R8 texture storage in that context too. Upload/calibration textures
+remain ordinary read inputs. No native app image is read back or modified.
+The user confirmed **IR visible and stable in both eyes** with Browser over
+Virtual Desktop during a 30-second test. GL and pose errors remained zero and
+normal RGB was restored afterward.
+
+An earlier diagnostic sampled only our own unprotected output and found a
+uniform green result; a later temporary constant-draw/clear diagnostic hit a
+Frida-caught native exception. Those diagnostics were removed before production
+testing. Once context protection was identified, no protected-output readback
+was attempted. Debug code and raw images are not part of the repository.
+
+## Separate startup failure and Frida runtime update
+
+The following repeat launch crashed the compositor during calibration transfer,
+before either eye map was complete and before IR substitution was enabled.
+The new tombstone reports SIGSEGV in the timewarp draw call, with an invalid
+branch destination containing instruction bytes. The compositor restarted in
+the same boot; the user confirmed RGB and menus recovered normally. This is a
+new, retained report, separate from the original automatic headset reboot.
+
+The installed Frida 17.17 used multi-instruction ARM64 inline redirects. Frida
+17.23 documents a matching online patch race and prefers single-instruction
+branches to narrow it; see the [17.23 release notes](https://frida.re/news/2026/10/07/frida-17-23-0-released/).
+This is consistent with the observed startup fault, not proof of all earlier
+failures. The launcher now rejects Frida older than 17.23 before device access.
+The user ran the supplied setup script to prepare isolated 17.24.3 client/server
+files on the laptop. The existing userdata helper and global Python installation
+were preserved. The newer server is staged only in tmpfs, without restarting
+adbd or su. A live query confirmed the draw redirect is now one `b` instruction.
+
+The 17.24.3 remote transport then closed on the old 128 KiB calibration chunks.
+A minimal script with no rendering hooks reproduced the cutoff: payloads up to
+64 KiB worked; 128 KiB disconnected, while both server and compositor stayed alive.
+This matches [Frida issue 3806](https://github.com/frida/frida/issues/3806).
+Calibration chunks are now 64 KiB to leave room for RPC framing. Startup and IR
+rendering then succeeded on the newer runtime with zero reported GL/pose errors.
+The two-minute run ended normally, retained the compositor PID, restored RGB
+and restored the empty prior display override. Visual confirmation of repeated
+Browser/Virtual Desktop switching is pending.
+
+Inactive contexts may retain GL objects until their native context/share group
+dies; cleanup never deletes names through a foreign context. Independent EGL
+and AHardwareBuffer references are released, with deferred GL cleanup reported.
+Each run is limited to eight live and 64 total created contexts, returning to RGB
+if exceeded. Long-running app compatibility and the original reboot remain open.
 
 ## Collect logs before another experiment
 

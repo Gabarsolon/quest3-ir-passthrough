@@ -1,10 +1,12 @@
 # RAM-only system passthrough replacement
 
-App switching has a reported freeze/reboot regression, including a flat Browser
-window and Virtual Desktop. The configuration below is the preferred Home test,
-not a validated app-switching release. See [the crash investigation](app-transition-crash.md).
+App switching previously caused green IR and a reported freeze/reboot. The
+renderer now owns resources per EGL context and allocates protected IR outputs
+when required by Browser. A short Browser-over-Virtual-Desktop test passed, and
+a two-minute run on the newer runtime ended normally. Visual confirmation of
+repeated switches is pending. See [the crash investigation](app-transition-crash.md).
 
-Preferred tested launch: `python tools/system_passthrough.py --display-refresh 120`.
+Preferred launch: `powershell -NoProfile -ExecutionPolicy Bypass -File tools/run_ir.ps1 --display-refresh 120`.
 This selects about 60 new IR images/sec with a 120 Hz display request; the user
 called it the best version so far after confirming tearing was gone. The
 640x512 source is unchanged. The full-resolution investigation is documented in
@@ -18,18 +20,24 @@ the earlier severe flicker, and correct hand/silhouette alignment after calibrat
 ## Run
 
 Requirements on this setup: an authorized ADB connection with the server running, temporary
-root already active, Python with `frida==17.17.0` and NumPy, and LLVM clang.
+root already active, Python with NumPy, and LLVM clang. Frida 17.23 or newer is
+required; 17.17 is rejected before device access because of an ARM64 hot-hook
+race. `tools/update_frida_runtime.ps1` prepares matching 17.24.3 client/server
+files in an isolated laptop runtime. Run it once in normal PowerShell, then use
+`tools/run_ir.ps1`; global Python packages are unchanged.
 Firmware build `51154110174900520` is the only accepted build.
 
 Wireless ADB is selected by the host-only `QUEST3_ADB_SERIAL` environment value,
 then `%LOCALAPPDATA%/quest3-ir/adb-target.txt`, falling back to the USB serial.
 `--serial IP:PORT` overrides the target. No persistent headset ADB property is set.
-Enable a temporary TCP transport before restoring root: restarting ADB afterward
-can terminate the temporary su daemon. The saved root payload requires Wi-Fi off
-during exploitation; enable Wi-Fi after successful root recovery.
+Paired Android Wireless debugging has been verified with temporary root; it
+does not require `adb tcpip` or an adbd restart. If using legacy TCP mode, enable
+it before restoring root: restarting ADB afterward can terminate the temporary
+su daemon. The saved root payload requires Wi-Fi off during exploitation;
+enable Wi-Fi after successful root recovery.
 
 ```powershell
-python C:\Users\remus\quest3-ir-passthrough\tools\system_passthrough.py --display-refresh 120
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\remus\quest3-ir-passthrough\tools\run_ir.ps1 --display-refresh 120
 ```
 
 Enable normal Quest passthrough and leave the command running. `IR ACTIVE` means
@@ -54,6 +62,12 @@ Restart after changing options. Experimental `--ir-delay-ms 20` buffers the IR
 frames for timing diagnosis; default is 0. `--set-delay 20` changes this delay on
 a running controller. The user reported no improvement from the 20 ms delay;
 it is currently zero.
+
+`--brightness 1.5` multiplies normalized IR luminance by 1.5 before clipping to
+the output range. `1.0` is neutral; `0.7` dims it, and `0` gives a black IR image.
+The accepted range is 0 through 4, with nonfinite values rejected. This option
+affects only the replacement IR pixels for the current run, not camera exposure
+or headset display brightness. Restart the controller to change it.
 
 `--display-refresh 120` optionally requests a 120 Hz display for this run. The
 60 Hz IR images can then have even two-display-frame holds, instead of alternating
@@ -135,9 +149,35 @@ request, these enhancements remain optional: the default is linear with `--aa of
 The current running session keeps its selected options until stopped; changing
 launch defaults does not change an already running controller.
 
-The launcher reuses existing `/data/local/tmp/su` and Frida helpers. It does not
+The launcher reuses existing `/data/local/tmp/su` and can reuse a version-matched
+Frida helper. It does not
 run the saved root exploit, which writes userdata files. Temporary root must
 already be active; root restoration remains a separate operation.
+
+The wrapper supplies `--frida-server PATH` from its isolated host runtime.
+The controller verifies the AArch64 executable, streams it into a root-only
+tmpfs upload directory through a one-shot localhost receiver over the existing
+ADB connection, verifies SHA-256, then stages it as the RAM Frida server.
+It only replaces/stops a server owned by this RAM directory. The old userdata
+server is preserved. Normal stop removes hooks and stops a server started by
+that run. A pre-existing RAM server is left running. The new runtime's 128 KiB
+message limit is handled with 64 KiB calibration chunks.
+
+Each EGL context gets its own program cache, framebuffer, texture names, IR
+uploads, pose/frame latches and output images. Native draws in other contexts
+return before GL queries or substitutions. Program relink/deletion invalidates
+cached sampler locations, and context destruction/reuse retires its renderer.
+Protected contexts use protected owned YUV buffers and EGLImages; optional
+edge AA also uses a protected R8 intermediate. Native app surfaces are not read
+back or rewritten. The IR remap temporarily disables and restores native clip
+distances and sample masking.
+
+Cleanup only deletes GL names through their owning current context. If an
+inactive context never draws again, independent EGL/AHardwareBuffer references
+are released but GL deletion can be deferred until the native context/share
+group is destroyed. The controller reports this condition. This remains a
+prototype resource-lifetime limitation, bounded to eight live contexts and 64
+created contexts per run; exceeding the budget returns to RGB.
 
 ## Capture and camera schedule
 
