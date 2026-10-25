@@ -63,6 +63,36 @@ reports. Full reports stay in host temporary storage, outside the public repo.
 The paired transport later went offline; the user will reconnect later. No
 renderer change has been deployed.
 
+## USB recovery and wireless-root verification
+
+The user reconnected by USB later that evening. The updated ordinary-shell
+collector completed, including native protobuf summaries; no new incident
+tombstone was present. Before restoring root, the firmware and saved preload
+checksum were checked. The unchanged saved recovery payload succeeded on the
+fifth attempt, with Wi-Fi disabled during exploitation. Failed attempts rebooted
+the headset; logs from those recovery boots must not be attributed to the earlier
+app-transition freeze.
+
+Wi-Fi was re-enabled afterward. Wireless debugging needed enabling again and
+displayed a network-approval popup, which the user accepted. Paired TLS wireless
+ADB then reconnected automatically. `su -c id` over that explicitly selected
+wireless transport returned `uid=0(root)` in the same boot as USB verification.
+The detached su daemon and adbd retained their PIDs throughout this Wi-Fi step;
+no `adb tcpip` or adbd restart was used. The host preference now uses the paired
+mDNS transport name so a changed connection port need not be hard-coded.
+
+Rooted inspection found pstore empty and confirmed the newest retained raw
+tombstone is the earlier 18:07 compositor crash. It supplies no newer evidence
+for the app-transition freeze. A bounded RGB-only compositor probe then recorded
+17,440 draws, 15,696 matching the passthrough sampler, with no reported probe
+errors or compositor restart. Nine matching programs shared one EGL context and
+render thread, external YUV sampler type `0x8be7`, a 3184-byte UBO, and camera
+offsets 2912/2928/2944/2960. The viewport was 4128x2208 with 2064x1104 stereo
+scanout halves. This establishes the Home baseline only; Browser and Virtual
+Desktop traces remain pending. The probe queried GL state without texture/buffer
+binds, uploads, native mapped-memory reads or camera changes, then detached.
+IR substitution remains off.
+
 ## Concrete gaps to investigate
 
 The hook intercepts `glDrawElements` throughout the compositor process. It caches
