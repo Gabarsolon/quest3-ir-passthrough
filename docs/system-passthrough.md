@@ -51,6 +51,29 @@ The subsequent direct camera-field correction also removed the menu tearing;
 the user confirmed both the menu and IR motion are correct. This method is now
 the default. Pixelation from the low-resolution source remains under investigation.
 
+Image reconstruction can be selected at launch with `--filter linear|cubic|sgsr`
+or changed live with `--set-filter linear|cubic|sgsr`. SGSR is now the default
+after the user confirmed clearer edges and smooth motion.
+Cubic uses the checked `GL_IMG_texture_filter_cubic` extension only on the R8 IR
+image; the floating-point calibration map stays linear. The user reported no
+clear visual improvement from cubic, though motion/menu rendering stayed smooth.
+
+SGSR uses a monochrome adaptation of Qualcomm's SGSR 1 edge-direction shader in
+the existing remap pass. It samples the current IR image without adding a history
+buffer. `--sgsr-sharpness 1.5` is the default; values1 through2 are accepted when
+launching. The12-tap luminance filter uses an8/255 edge threshold and the upstream
+VR contrast clamp of+/-23/255. See [vendor attribution](../tools/vendor/sgsr1/README.md)
+and its BSD-3-Clause license. The user confirmed improvement, with some remaining
+edge aliasing/outlines still being investigated. This can reconstruct
+edges but cannot add uncaptured detail or perform temporal denoising. SGSR2 would
+need matching depth/motion data and a different history pipeline.
+
+The SGSR hardware test kept display rendering at72Hz, with no stale frames,
+zeroGL/pose errors and about2ms timewarp. Both directions of live switching
+between linear and SGSR were checked successfully. Current source resolution
+remains640x512. Sampler bindings are explicitly saved/restored so these options
+use our own image filters even if another app has bound sampler objects.
+
 The launcher reuses existing `/data/local/tmp/su` and Frida helpers. It does not
 run the saved root exploit, which writes userdata files. Temporary root must
 already be active; root restoration remains a separate operation.

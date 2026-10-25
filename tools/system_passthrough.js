@@ -1,5 +1,5 @@
 'use strict';
-// OPTIONS and C_SOURCE are supplied by system_passthrough.py.
+// OPTIONS, C_SOURCE and SGSR_SOURCE are supplied by system_passthrough.py.
 // Camera buffers are read only. The compositor samples our own YUV images.
 const gl = Process.getModuleByName('libGLESv3.so');
 const egl = Process.getModuleByName('libEGL.so');
@@ -60,6 +60,7 @@ const sources = ['left', 'right'].map(eye => ({
 let program = 0, framebuffer = 0, display = ptr(0), api;
 let irDelayMs = OPTIONS.irDelayMs;
 let poseTracker = ptr(0);
+let cubicSupported = false;
 const createPoseTracker = native(tracking, 'createHeadTrackingFbs', 'pointer', ['ulong']);
 const destroyPoseTracker = native(tracking, 'destroyHeadTrackingFbs', 'void', ['ulong', 'pointer']);
 
@@ -88,9 +89,13 @@ function textureParameters(target) {
 function initialize() {
     if (OPTIONS.calibration && sources.some(s => s.mapping === null)) return;
     try {
-        if (OPTIONS.calibration && !G.string(0x1f03).readUtf8String().includes('GL_OES_texture_float_linear'))
+        const extensions = G.string(0x1f03).readUtf8String().split(' ');
+        cubicSupported = extensions.includes('GL_IMG_texture_filter_cubic');
+        if (OPTIONS.filter === 'cubic' && !cubicSupported)
+            throw Error('Cubic filtering requires GL_IMG_texture_filter_cubic');
+        if (OPTIONS.calibration && !extensions.includes('GL_OES_texture_float_linear'))
             throw Error('Float calibration maps require GL_OES_texture_float_linear');
-        const vs = compileShader(0x8b31, '#version 300 es\nout highp vec2 uv;void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);uv=p;gl_Position=vec4(p*2.0-1.0,0.0,1.0);}');
+        const vs = compileShader(0x8b31, '#version 310 es\nout highp vec2 uv;void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);uv=p;gl_Position=vec4(p*2.0-1.0,0.0,1.0);}');
         // Camera texture coordinates invert the visible direction of rotation.
         const transforms = ['', 'p=vec2(p.y,1.0-p.x);', 'p=vec2(1.0-p.x,1.0-p.y);', 'p=vec2(1.0-p.y,p.x);'];
         const transform = transforms[OPTIONS.rotate / 90] + (OPTIONS.mirror ? 'p.x=1.0-p.x;' : '');
@@ -99,7 +104,7 @@ function initialize() {
         const coordinates = OPTIONS.calibration
             ? 'p=texture(irMapping,p).rg;'
             : transform + fit;
-        const fragment = '#version 300 es\n#extension GL_EXT_YUV_target : require\nprecision highp float;in highp vec2 uv;uniform highp sampler2D irImage;uniform highp sampler2D irMapping;uniform vec2 irRange;layout(yuv) out vec4 color;void main(){vec2 p=(uv-0.5)/' + Number(OPTIONS.zoom).toFixed(6) + '+0.5;' + coordinates + 'float y=clamp((texture(irImage,p).r-irRange.x)*irRange.y,0.0,1.0);if(any(lessThan(p,vec2(0.0)))||any(greaterThan(p,vec2(1.0))))y=0.0;color=vec4(y,0.5,0.5,1.0);}';
+        const fragment = '#version 310 es\n#extension GL_EXT_YUV_target : require\n#define SGSR_SHARPNESS ' + Number(OPTIONS.sgsrSharpness).toFixed(6) + '\nprecision highp float;in highp vec2 uv;uniform highp sampler2D irImage;uniform highp sampler2D irMapping;uniform vec2 irRange;uniform int irFilter;layout(yuv) out vec4 color;\n' + SGSR_SOURCE + '\nvoid main(){vec2 p=(uv-0.5)/' + Number(OPTIONS.zoom).toFixed(6) + '+0.5;' + coordinates + 'float sampleY=irFilter==2?sgsrLuma(p):texture(irImage,p).r;float y=clamp((sampleY-irRange.x)*irRange.y,0.0,1.0);if(any(lessThan(p,vec2(0.0)))||any(greaterThan(p,vec2(1.0))))y=0.0;color=vec4(y,0.5,0.5,1.0);}';
         let fs = 0;
         try {
             fs = compileShader(0x8b30, fragment);
@@ -141,6 +146,7 @@ function initialize() {
         }
         const imageLocation = G.location(program, Memory.allocUtf8String('irImage'));
         const rangeLocation = G.location(program, Memory.allocUtf8String('irRange'));
+        api.filterLocation(G.location(program, Memory.allocUtf8String('irFilter')));
         if (OPTIONS.calibration) api.maps(sources[0].map, sources[1].map,
             G.location(program, Memory.allocUtf8String('irMapping')));
         api.resources(program, framebuffer, sources[0].upload, sources[1].upload,
@@ -176,7 +182,7 @@ const imports = {control: storage, pose_records: poseRecords, initialize_resourc
     glBufferStorageEXT: getProc(Memory.allocUtf8String('glBufferStorageEXT'))};
 for (const name of ['clock_gettime', 'open', 'read', 'close']) imports[name] = libc.getExportByName(name);
 for (const name of ['glGetIntegerv', 'glGetBooleanv', 'glIsEnabled', 'glEnable', 'glDisable',
-    'glGetUniformLocation', 'glGetUniformiv', 'glActiveTexture', 'glBindTexture',
+    'glGetUniformLocation', 'glGetUniformiv', 'glActiveTexture', 'glBindTexture', 'glTexParameteri', 'glBindSampler',
     'glBindFramebuffer', 'glFramebufferTexture2D', 'glCheckFramebufferStatus', 'glGetError',
     'glBindBuffer', 'glPixelStorei', 'glTexSubImage2D', 'glViewport', 'glColorMask',
     'glUseProgram', 'glUniform1i', 'glUniform2f', 'glDrawArrays', 'glGetIntegeri_v', 'glGetInteger64i_v',
@@ -189,6 +195,8 @@ api = {
     resources: new NativeFunction(module.set_resources, 'void', ['uint', 'uint', 'uint', 'uint', 'uint', 'uint', 'int', 'int', 'uint', 'uint']),
     heartbeat: new NativeFunction(module.heartbeat, 'void', []),
     delay: new NativeFunction(module.set_delay, 'void', ['uint']),
+    filter: new NativeFunction(module.set_filter, 'void', ['uint']),
+    filterLocation: new NativeFunction(module.set_filter_location, 'void', ['int']),
     pose: new NativeFunction(module.configure_pose, 'void', ['pointer', 'pointer', 'uint', 'pointer', 'pointer']),
     poseAge: new NativeFunction(module.set_pose_age, 'void', ['uint']),
     poseMethod: new NativeFunction(module.set_pose_method, 'void', ['uint']),
@@ -200,6 +208,8 @@ api = {
 api.configure(sources[0].path, sources[1].path, sources[0].sequence, sources[1].sequence,
     sources[0].pixels, sources[1].pixels, OPTIONS.normalize ? 1 : 0, OPTIONS.swapEyes ? 1 : 0);
 api.delay(irDelayMs);
+const filterModes = ['linear', 'cubic', 'sgsr'];
+api.filter(filterModes.indexOf(OPTIONS.filter));
 api.poseMethod(OPTIONS.poseMethod === 'direct' ? 1 : 0);
 if (OPTIONS.poseCorrection) {
     const extrinsics = Memory.alloc(14 * 4);
@@ -212,15 +222,16 @@ if (OPTIONS.poseCorrection) {
     }
     api.pose(poseTracker, extrinsics, OPTIONS.poseAgeMs, sources[0].stamp, sources[1].stamp);
 }
-const statsBuffer = Memory.alloc(19 * 8);
+const statsBuffer = Memory.alloc(20 * 8);
 function stats() {
     api.stats(statsBuffer);
-    const values = Array.from({length: 19}, (_, i) => Number(statsBuffer.add(i * 8).readU64()));
+    const values = Array.from({length: 20}, (_, i) => Number(statsBuffer.add(i * 8).readU64()));
     return {strategy: 'owned-yuv-native', sourceSize: [640, 512], outputSize: OPTIONS.outputSize, irDelayMs,
         enabled: !!values[0], ready: !!values[1],
         cleaned: !!values[2], errors: values[3], substitutedDraws: values[4],
         poseCorrection: !!OPTIONS.poseCorrection, poseMethod: OPTIONS.poseMethod, poseCorrectedDraws: values[15],
         poseSamples: values[16], poseFailures: values[17], poseAgeMs: values[18],
+        filter: filterModes[values[19]], sgsrSharpness: OPTIONS.sgsrSharpness,
         refreshes: values[5], lastSubstitution: values[6], sources: sources.map((s, i) =>
             ({eye: s.eye, uploads: values[7 + i], sequence: values[9 + i],
                 changedSamples: values[13 + i], valid: !!values[11 + i]}))};
@@ -236,6 +247,11 @@ rpc.exports.setdelay = function (value) {
 rpc.exports.setposeage = function (value) {
     if (!Number.isInteger(value) || value < 0 || value > 100) throw Error('Invalid pose age');
     api.poseAge(value);
+};
+rpc.exports.setfilter = function (value) {
+    if (!filterModes.includes(value)) throw Error('Invalid filter');
+    if (value === 'cubic' && !cubicSupported) throw Error('Cubic filtering is unsupported');
+    api.filter(filterModes.indexOf(value));
 };
 rpc.exports.setmap = function (eye, data) {
     if (eye !== 0 && eye !== 1) throw Error('Invalid eye');

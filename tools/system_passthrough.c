@@ -15,6 +15,7 @@ extern void glEnable(U), glDisable(U);
 extern int glGetUniformLocation(U, const char *);
 extern void glGetUniformiv(U, int, int *);
 extern void glActiveTexture(U), glBindTexture(U, U);
+extern void glTexParameteri(U, U, int), glBindSampler(U, U);
 extern void glBindFramebuffer(U, U);
 extern void glFramebufferTexture2D(U, U, U, U, int);
 extern U glCheckFramebufferStatus(U), glGetError(void);
@@ -59,6 +60,7 @@ typedef struct {
   Q history_capture_ns[16];
   float camera_pose[7];
   U pose_valid;
+  U upload_filter;
 } Source;
 
 typedef struct {
@@ -79,6 +81,8 @@ typedef struct {
   U original_mapping_count;
   Q pose_draws, pose_samples, pose_failures;
   unsigned char pose_scratch[4096];
+  U filter_mode;
+  int filter_location;
 } Control;
 
 extern Control control;
@@ -121,6 +125,8 @@ void set_resources(U program, U framebuffer, U left_upload, U right_upload,
 
 void heartbeat(void) { control.heartbeat = now_ms(); }
 void set_delay(U value) { if (value <= 200) control.delay_ms = value; }
+void set_filter(U value) { if (value <= 2) control.filter_mode = value; }
+void set_filter_location(int location) { control.filter_location = location; }
 void configure_pose(void *tracker, const float *cameras, U age,
     const char *left_stamp, const char *right_stamp) {
   int i, j;
@@ -153,6 +159,7 @@ void stats(Q *out) {
   out[14] = control.sources[1].changed_samples;
   out[15] = control.pose_draws; out[16] = control.pose_samples;
   out[17] = control.pose_failures; out[18] = control.pose_age_ms;
+  out[19] = control.filter_mode;
 }
 
 static int integer(U key) { int value; glGetIntegerv(key, &value); return value; }
@@ -248,6 +255,12 @@ static void refresh_source(Source *s) {
     scale = 255.0f / (float)(hi - lo < 12 ? 12 : hi - lo);
   }
   glBindTexture(0x0de1, s->upload_texture);
+  if (s->upload_filter != control.filter_mode + 1) {
+    int filter = control.filter_mode == 1 ? 0x9139 : 0x2601;
+    glTexParameteri(0x0de1, 0x2801, filter);
+    glTexParameteri(0x0de1, 0x2800, filter);
+    s->upload_filter = control.filter_mode + 1;
+  }
   glTexSubImage2D(0x0de1, 0, 0, 0, 640, 512, 0x1903, 0x1401, pixels);
   if (s->map_texture) {
     glActiveTexture(0x84ce);
@@ -278,8 +291,12 @@ static void refresh(void) {
   for (i = 0; i < 8; i++) enabled[i] = glIsEnabled(caps[i]);
   glActiveTexture(0x84cf);
   int texture_2d = integer(0x8069), texture_external = integer(0x8d67);
+  int image_sampler = integer(0x8919);
   glActiveTexture(0x84ce);
   int map_binding = integer(0x8069);
+  int map_sampler = integer(0x8919);
+  /* Use our texture's filtering rather than an unrelated inherited sampler. */
+  glBindSampler(14, 0); glBindSampler(15, 0);
   glActiveTexture(0x84cf);
   glBindBuffer(0x88ec, 0);
   glPixelStorei(0x0cf5, 1); glPixelStorei(0x0cf2, 0);
@@ -290,6 +307,7 @@ static void refresh(void) {
     glBindFramebuffer(0x8ca9, control.framebuffer);
     glUseProgram(control.program);
     glUniform1i(control.image_location, 15);
+    glUniform1i(control.filter_location, control.filter_mode);
     if (control.sources[0].map_texture) glUniform1i(control.map_location, 14);
     glViewport(0, 0, control.width, control.height);
     glColorMask(1, 1, 1, 1);
@@ -308,6 +326,7 @@ static void refresh(void) {
   glBindTexture(0x8d65, texture_external);
   glActiveTexture(0x84ce);
   glBindTexture(0x0de1, map_binding);
+  glBindSampler(14, map_sampler); glBindSampler(15, image_sampler);
   glActiveTexture(0x84cf);
   glBindBuffer(0x88ec, unpack);
   glPixelStorei(0x0cf5, alignment); glPixelStorei(0x0cf2, row);

@@ -173,6 +173,11 @@ class ControlHandler(socketserver.StreamRequestHandler):
                 if type(value) is not int or not 0 <= value <= 100:
                     raise ValueError("Pose age must be an integer from 0 to 100 ms")
                 self.server.state["requested_pose_age_ms"] = value
+            elif request.get("command") == "filter":
+                value = request.get("filter")
+                if value not in ["linear", "cubic", "sgsr"]:
+                    raise ValueError("Filter must be linear, cubic or sgsr")
+                self.server.state["requested_filter"] = value
             self.wfile.write((json.dumps(self.server.state) + "\n").encode())
         except (ValueError, OSError):
             return
@@ -314,9 +319,12 @@ def run(options):
                     "irDelayMs": options.ir_delay_ms,
                     "poseCorrection": options.pose_correction, "poseAgeMs": options.pose_age_ms,
                     "poseMethod": options.pose_method,
+                    "filter": options.filter,
+                    "sgsrSharpness": options.sgsr_sharpness,
                     "cameraPoses": camera_poses}
         source = ("const OPTIONS=" + json.dumps(settings) + ";\nconst C_SOURCE="
                   + json.dumps((HERE / "system_passthrough.c").read_text()) + ";\n"
+                  + "const SGSR_SOURCE=" + json.dumps((HERE / "vendor" / "sgsr1" / "mono.glsl").read_text()) + ";\n"
                   + (HERE / "system_passthrough.js").read_text())
         script = session.create_script(source)
         script.on("message", message)
@@ -340,6 +348,10 @@ def run(options):
             if requested_age != options.pose_age_ms:
                 options.pose_age_ms = requested_age
                 script.exports_sync.setposeage(options.pose_age_ms)
+            requested_filter = state.get("requested_filter", options.filter)
+            if requested_filter != options.filter:
+                options.filter = requested_filter
+                script.exports_sync.setfilter(options.filter)
             if mode_script:
                 mode_script.exports_sync.heartbeat()
                 state["tracking_mode"].update(mode_script.exports_sync.status())
@@ -417,6 +429,7 @@ def main():
     commands.add_argument("--status", action="store_true")
     commands.add_argument("--set-delay", type=int, metavar="MS", help="Change the running controller's experimental frame delay.")
     commands.add_argument("--set-pose-age", type=int, metavar="MS", help="Change the running IR pose timestamp estimate.")
+    commands.add_argument("--set-filter", choices=["linear", "cubic", "sgsr"], help="Change the running controller's IR reconstruction filter.")
     parser.add_argument("--serial", default=adb.SERIAL)
     parser.add_argument("--ir-delay-ms", type=int, default=0, help="Experimental frame delay, 0–200 ms; default 0.")
     parser.add_argument("--seconds", type=float, default=0, help="Stop automatically after this duration; default runs until Ctrl+C.")
@@ -438,6 +451,10 @@ def main():
                         help="Temporary utility frequency for fast hands mode; restored on stop. Default 60 Hz.")
     parser.add_argument("--output-size", choices=["640x512", "1280x960", "2328x1748"], default="1280x960",
                         help="GPU remap texture size; source IR remains 640x512. Default 1280x960.")
+    parser.add_argument("--filter", choices=["linear", "cubic", "sgsr"], default="sgsr",
+                        help="IR reconstruction filter. Cubic requires GL_IMG_texture_filter_cubic.")
+    parser.add_argument("--sgsr-sharpness", type=float, default=1.5,
+                        help="SGSR 1 edge sharpness, 1 to 2; default 1.5.")
     parser.add_argument("--no-calibration", action="store_true", help="Use the earlier rotated/cropped view instead of factory ray maps.")
     parser.add_argument("--no-normalize", action="store_true")
     parser.add_argument("--stretch", action="store_true", help="Use the whole sensor image instead of preserving its aspect ratio.")
@@ -447,6 +464,8 @@ def main():
         options.pose_correction = not options.no_calibration
     if options.seconds < 0 or not 0.25 <= options.zoom <= 5:
         parser.error("seconds must be nonnegative; zoom must be between 0.25 and 5")
+    if not 1 <= options.sgsr_sharpness <= 2:
+        parser.error("SGSR sharpness must be between 1 and 2")
     if not 0 <= options.ir_delay_ms <= 200 or (options.set_delay is not None and not 0 <= options.set_delay <= 200):
         parser.error("delay must be between 0 and 200 ms")
     if not 0 <= options.pose_age_ms <= 100 or (options.set_pose_age is not None and not 0 <= options.set_pose_age <= 100):
@@ -455,7 +474,10 @@ def main():
         parser.error("pose correction requires factory calibration")
     adb.SERIAL = options.serial
     try:
-        if options.set_pose_age is not None:
+        if options.set_filter is not None:
+            result = control("filter", filter=options.set_filter)
+            print("Requested IR filter:", result["requested_filter"])
+        elif options.set_pose_age is not None:
             result = control("pose_age", age_ms=options.set_pose_age)
             print("Requested IR pose age:", result["requested_pose_age_ms"], "ms")
         elif options.set_delay is not None:
