@@ -6,8 +6,9 @@ reach the IR tracking cameras inside Meta's XR camera HAL (see
 [reverse-engineering.md](reverse-engineering.md) and
 [firmware-analysis.md](firmware-analysis.md)).
 
-**Status: temporary root achieved.** No partition was written; nothing survives a
-reboot.
+**Status: temporary root achieved.** Root and runtime patches are cleared by a
+reboot. Helper files in `/data/local/tmp` survive; boot and system partitions
+were not modified.
 
 > **Hard constraint: everything here stays temporary.** No partition writes, no
 > persistent root, no flashing, no bootloader unlock. The whole point is that a
@@ -101,7 +102,7 @@ which sidesteps the carrier problem entirely because it needs no module load.
 
 ## Cleanup
 
-Left on `/data/local/tmp` (all transient; wiped on reboot):
+Left on `/data/local/tmp` (helper files survive reboot; root must be restored):
 
 - From this work: `preload`, `ionstack.conf`, `su`, `temp_su.sock`
   (`su_daemon.log` if written).

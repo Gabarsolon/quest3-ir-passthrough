@@ -97,7 +97,23 @@ void start_c(long argc, char **argv) {
     while (rgp[k4] && k4 < 165) { rgs[k4] = rgp[k4]; k4++; }
     const char *se = ".seq"; for (long j = 0; se[j]; j++) rgs[k4++] = se[j]; rgs[k4] = 0;
     unsigned long long gseq = 0;
+#ifdef IRFEED_RAW_ONLY
+    char stamp_path[160], stamp_tmp[168];
+    long sk = 0;
+    while (outp[sk] && sk < 140) { stamp_path[sk] = outp[sk]; sk++; }
+    const char *stamp_ext = ".stamp";
+    for (long j = 0; stamp_ext[j]; j++) stamp_path[sk++] = stamp_ext[j];
+    stamp_path[sk] = 0;
+    for (long j = 0; j <= sk; j++) stamp_tmp[j] = stamp_path[j];
+    stamp_tmp[sk++] = '.'; stamp_tmp[sk++] = 't'; stamp_tmp[sk++] = 'm'; stamp_tmp[sk++] = 'p'; stamp_tmp[sk] = 0;
+#endif
+    /* The system compositor rotates on the GPU and only needs mono8. Keep the
+     * original RGBA output for the separate PC viewer build. */
+#ifdef IRFEED_RAW_ONLY
+    unsigned char *rgba = 0;
+#else
     unsigned char *rgba = (unsigned char *)sys6(SYS_mmap, 0, SZ * 4, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+#endif
     if ((long)rgba < 0) rgba = 0;
 
     i64 pidfd = sys2(SYS_pidfd_open, pid, 0);
@@ -124,20 +140,47 @@ void start_c(long argc, char **argv) {
     pw2("irfeed: pid="); pnum(pid); pw2(" fds="); pnum(nf); pw2("\n");
 
     /* timespec for 8ms sleep */
-    long ts[2]; ts[0] = 0; ts[1] = 8000000;
+    long ts[2]; ts[0] = 0;
+#ifdef IRFEED_RAW_ONLY
+    ts[1] = 2000000; /* reduce publication jitter at a 60 Hz sensor cadence */
+#else
+    ts[1] = 8000000;
+#endif
 
     unsigned long prev[MAXF]; long have[MAXF];
+#ifdef IRFEED_RAW_ONLY
+    long pending[MAXF] = {0};
+    unsigned long long changed_at[MAXF] = {0};
+#endif
     for (long i = 0; i < MAXF; i++) { prev[i] = 0; have[i] = 0; }
     unsigned long iters = 0; unsigned long good = 0; long drop = 0;
     for (;;) {
+#ifdef IRFEED_RAW_ONLY
+        long clock[2];
+        sys2(SYS_clock_gettime, CLOCK_MONOTONIC, (long)clock);
+        unsigned long long observed = (unsigned long long)clock[0] * 1000000000ULL + clock[1];
+#endif
         long pick = -1; unsigned long ps = 0;
         for (long i = 0; i < nf; i++) {
             unsigned char *m = maps[i];
             if (!m) continue;
             unsigned long s = 0;
             for (long j = 0; j < SZ; j += 64) s += m[j];
+#ifdef IRFEED_RAW_ONLY
+            /* Do not publish a DMA buffer while its sampled pixels still
+             * change. One stable polling interval avoids treating partial
+             * writes as extra camera frames at the faster polling rate. */
+            if (!have[i] || s != prev[i]) {
+                prev[i] = s; have[i] = 1; pending[i] = 1;
+                changed_at[i] = observed;
+                continue;
+            }
+            if (!pending[i]) continue;
+            pending[i] = 0;
+#else
             if (have[i] && s == prev[i]) continue;   /* unchanged -> stale, skip */
             prev[i] = s; have[i] = 1;
+#endif
             if (s > ps) { ps = s; pick = i; }        /* freshest frame this tick */
         }
         if (pick < 0) { sys6(SYS_nanosleep, (long)ts, 0, 0, 0, 0, 0); continue; }
@@ -164,7 +207,25 @@ void start_c(long argc, char **argv) {
                 total += w;
             }
             sys1(SYS_close, ofd);
-            sys4(SYS_renameat, AT_FDCWD, (long)tmpp, AT_FDCWD, (long)outp);
+            if (total == SZ) {
+                long renamed = sys4(SYS_renameat, AT_FDCWD, (long)tmpp, AT_FDCWD, (long)outp);
+#ifdef IRFEED_RAW_ONLY
+                if (renamed == 0) {
+                    gseq++;
+                    /* Time of the last observed DMA change, not a hardware
+                     * exposure timestamp. Pair it with this publication. */
+                    unsigned long long stamp[2] = {gseq, changed_at[pick]};
+                    i64 stampfd = sys4(SYS_openat, AT_FDCWD, (long)stamp_tmp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                    if (stampfd >= 0) {
+                        long written = sys3(SYS_write, stampfd, (long)stamp, 16);
+                        sys1(SYS_close, stampfd);
+                        if (written == 16) sys4(SYS_renameat, AT_FDCWD, (long)stamp_tmp, AT_FDCWD, (long)stamp_path);
+                    }
+                    i64 sfd = sys4(SYS_openat, AT_FDCWD, (long)rgs, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                    if (sfd >= 0) { sys3(SYS_write, sfd, (long)&gseq, 8); sys1(SYS_close, sfd); }
+                }
+#endif
+            }
         }
         if (rgba) {
             unsigned int *dst = (unsigned int *)rgba;

@@ -10,3 +10,7 @@ __pycache__/
 ota-inspect/
 *.img
 payload.bin
+
+# Local headset images and raw camera frames
+/captures/
+/frames/

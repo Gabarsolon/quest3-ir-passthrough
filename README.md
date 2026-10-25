@@ -6,7 +6,29 @@ The PSVR2 does this out of the box: its passthrough comes from monochrome camera
 
 This repo is documentation plus the small tools we used. It collects what the headset exposes, what the official APIs allow, what other people have tried, and the code that reads the tracking-camera frames and displays them live.
 
-## Short answer (as of October 2026, Horizon OS v79)
+## RAM-only system replacement (rooted v79 prototype)
+
+The current prototype replaces the system compositor's RGB passthrough camera
+textures with live stereo IR. The user confirmed upright stereo IR, corrected proportions, and aligned hand
+tracking in normal Quest passthrough. The current hands-mode pipeline has measured
+about 60 changed IR images/sec per eye. Historical pose correction now runs by
+default; the user confirmed smooth IR motion without the earlier room-image
+flicker/black rectangles. Updating only the runtime camera-pose fields also
+resolved the menu tearing. Source resolution remains 640x512; improving image
+quality is the remaining work. It uses temporary root and an in-memory hook; Virtual Desktop is
+not required. Run it from PowerShell with the headset connected and temporary
+root already active:
+
+```powershell
+python C:\Users\remus\quest3-ir-passthrough\tools\system_passthrough.py
+```
+
+Ctrl+C restores RGB. A second terminal can run the same command with `--stop` or
+`--status`. New headset files stay in tmpfs. See
+[system passthrough](docs/system-passthrough.md) for setup, validation, and current
+geometry/app-coverage limits.
+
+## Public API background (unrooted headset)
 
 **No supported route exists.**
 
@@ -18,7 +40,10 @@ This repo is documentation plus the small tools we used. It collects what the he
 
 Analysis of the v79 system image confirms this at the hardware level: the Quest 3 has **six cameras** — two Sony IMX471 **color** sensors (the passthrough cameras, exposed to apps) and four OmniVision **monochrome, IR-sensitive** sensors (OG01A1B + OV7251) used for tracking. The IR-capable cameras exist and work in the dark, but they are owned by Meta's XR camera HAL / tracking pipeline below Android and are never published as Android cameras. See [docs/firmware-analysis.md](docs/firmware-analysis.md).
 
-Getting at the tracking-camera pixels would mean working inside that HAL on a modified device. That is invasive, firmware-dependent and outside this repo's scope.
+The tools in this repository now read those buffers under temporary root and
+perform the substitution in the shared compositor. Older research documents
+describe the earlier public-API investigation; their statements that this work
+stops at that boundary are historical.
 
 ## What would change the answer
 
@@ -37,6 +62,7 @@ Getting at the tracking-camera pixels would mean working inside that HAL on a mo
 | [docs/passthrough-camera-api.md](docs/passthrough-camera-api.md) | How the official Passthrough Camera API works and why it can't give you IR |
 | [docs/prior-art.md](docs/prior-art.md) | Who has tried this and what they found, with links |
 | [docs/root-access.md](docs/root-access.md) | Work log: getting a temporary root shell (IonStack / CVE-2026-43499) to reach the tracking-camera HAL |
+| [docs/system-passthrough.md](docs/system-passthrough.md) | RAM-only script replacing shared system passthrough camera textures with IR |
 | [docs/ir-camera-mapping.md](docs/ir-camera-mapping.md) | Mapping the tracking service's dma-bufs to the physical IR cameras (left/right eye) |
 | [docs/vd-layer-injection.md](docs/vd-layer-injection.md) | Work log: injecting an XR composition layer behind the Virtual Desktop image (route toward showing IR) |
 | [docs/live-ir-feed.md](docs/live-ir-feed.md) | Work log: reading the tracking cameras live and viewing the feed on a PC (`irfeed` daemon + viewer) |
@@ -50,9 +76,10 @@ Getting at the tracking-camera pixels would mean working inside that HAL on a mo
 | Headset | Meta Quest 3 (`eureka`) |
 | Horizon OS | v79, build `UP1A.231005.007.A1` / `51154110174900520` |
 | Android base | 14, security patch 2025-01-06 |
-| Access | stock, locked bootloader (`verifiedbootstate=green`), `adb` shell user only |
+| Access | locked bootloader (`verifiedbootstate=green`), temporary root and RAM hooks |
 
-All data was collected with read-only `adb` commands (`dumpsys`, `getprop`, `pm list`). Nothing on the headset was modified.
+The original inventory was read-only. Current prototypes use volatile root,
+readers, and compositor hooks; firmware and system partitions remain unchanged.
 
 ## License
 
