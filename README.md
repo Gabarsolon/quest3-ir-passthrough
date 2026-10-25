@@ -36,6 +36,17 @@ Ctrl+C restores RGB. A second terminal can run the same command with `--stop` or
 [system passthrough](docs/system-passthrough.md) for setup, validation, and current
 geometry/app-coverage limits.
 
+To push committed changes, make this repository public and publish the
+`v0.1.0-preview.1` prerelease, run in a normal PowerShell terminal:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\publish_github.ps1
+```
+
+The script offers browser login if needed, verifies the remote history and tag,
+and reuses an already published matching release. `-DryRun` checks the local
+plan without network access. It does not access the headset.
+
 ## Public API background (unrooted headset)
 
 **No supported route exists.**
