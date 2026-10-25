@@ -1,5 +1,9 @@
 # RAM-only system passthrough replacement
 
+App switching has a reported freeze/reboot regression, including a flat Browser
+window and Virtual Desktop. The configuration below is the preferred Home test,
+not a validated app-switching release. See [the crash investigation](app-transition-crash.md).
+
 Preferred tested launch: `python tools/system_passthrough.py --display-refresh 120`.
 This selects about 60 new IR images/sec with a 120 Hz display request; the user
 called it the best version so far after confirming tearing was gone. The

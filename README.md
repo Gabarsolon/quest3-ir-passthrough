@@ -9,6 +9,13 @@ It runs in the shared system compositor; Virtual Desktop is not required.
 Normal system passthrough has been visually tested. Other applications and
 rendering layouts still need individual validation.
 
+**Known app-transition failure:** opening a flat Browser window has dropped the
+IR view; switching to Virtual Desktop produced a green right eye, diagonal
+rectangles/flicker, a freeze and an automatic headset reboot. The Home result
+does not establish app-transition stability. See the
+[crash investigation](docs/app-transition-crash.md). IR is currently left off
+while collecting post-reboot diagnostics.
+
 ## Current result
 
 The user confirmed upright stereo IR, corrected proportions, aligned hands,
