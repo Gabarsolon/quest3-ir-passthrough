@@ -51,9 +51,16 @@
       }
     ]
   },
-  "visualConfirmation": "pending after RPC synchronization fix",
+  "visualConfirmation": "User confirmed works fine after the RPC synchronization fix, October 29, 2026.",
   "limitations": [
     "Root recovery after reboot is still external.",
     "App Start/Stop and repeated app transitions need visual validation."
-  ]
+  ],
+  "releaseArtifact": {
+    "tag": "v0.2.0-preview.1",
+    "file": "quest-ir-v0.2.0-preview.1.apk",
+    "sha256": "bb09d91fc52abe572c00bf20eed0def2e6bb48c1ac92724c2b07903ab59e7f9f",
+    "nativeMatchesVisuallyConfirmedBuild": true,
+    "changesFromTestedApk": "Version name/code and bundled SGSR license; native and Java behavior unchanged."
+  }
 }

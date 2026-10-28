@@ -45,9 +45,13 @@ and remain diagnostic options.
 
 ## Run
 
-A development **Quest IR** headset app can now run the controller locally after
-temporary root is established. See [headset-only operation](docs/headset-controller.md)
-for the APK, Start/Stop controls, RAM scope, and current validation limits.
+The **Quest IR** headset app runs the controller locally after temporary root
+is established. Download the APK from
+[v0.2.0-preview.1](https://github.com/Gabarsolon/quest3-ir-passthrough/releases/tag/v0.2.0-preview.1),
+then open **Quest IR** under Unknown Sources and select **Start IR**. See
+[headset-only operation](docs/headset-controller.md) for controls, RAM scope,
+and current validation limits. The user confirmed the corrected headset build
+works; root still needs restoring after each reboot.
 The instructions below describe the maintained laptop controller.
 
 Requirements: Quest 3 on build **51154110174900520** (Horizon OS v79), active
@@ -147,11 +151,11 @@ PowerShell terminal, choose an unused tag and first write matching notes in
 `docs/releases/<tag>.md`, for example:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\publish_github.ps1 -Tag v0.2.0-preview.1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\publish_github.ps1 -Tag v0.2.0-preview.2
 ```
 
-The current published prototype is `v0.1.0-preview.2`; its
-[release notes](docs/releases/v0.1.0-preview.2.md) describe the fixes and limits.
+The current published prototype is `v0.2.0-preview.1`; its
+[release notes](docs/releases/v0.2.0-preview.1.md) describe the headset app and limits.
 The script loads `docs/releases/<tag>.md` and does not replace a tag
 that points elsewhere. `-DryRun` checks local prerequisites without network
 access; publishing offers GitHub login if needed. It does not access the headset.

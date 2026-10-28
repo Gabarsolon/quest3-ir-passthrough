@@ -1,4 +1,4 @@
-# Headset-only controller (development prototype)
+# Headset-only controller (preview release)
 
 The Quest IR control app runs the reader, factory calibration calculation,
 Frida injection, monitoring, and heartbeat on the Quest itself. It does not need
@@ -16,9 +16,11 @@ images, and logs remain temporary. No firmware or system partition is modified.
 
 ## Use
 
-1. Install `dist/quest-ir-headset-dev.apk` with authorized ADB or your usual APK
-   installer. Its launcher name is **Quest IR** (under Unknown Sources when
-   using the normal Quest app library).
+1. Download `quest-ir-v0.2.0-preview.1.apk` from the
+   [release page](https://github.com/Gabarsolon/quest3-ir-passthrough/releases/tag/v0.2.0-preview.1)
+   and install it with authorized ADB or your usual APK installer. Its launcher
+   name is **Quest IR** (under Unknown Sources in the normal Quest app library).
+   For ADB: `adb install -r quest-ir-v0.2.0-preview.1.apk`.
 2. Stop the laptop IR controller first. Enable normal system passthrough.
 3. Open Quest IR, choose brightness and optional filtering/display timing, then
    select **Start IR**. Options apply to that run. Linear filtering, no edge AA,
@@ -76,8 +78,11 @@ python tools/build_headset_app.py
 The Windows build uses official Android NDK r30 and Frida Core 17.24.3 with
 pinned archive checksums. The app build downloads the required official SDK
 platform/build tools, checks their published SHA-1 digests, and signs a
-development APK with a local key under `%LOCALAPPDATA%/quest3-ir/build`.
+preview APK with a local development key under `%LOCALAPPDATA%/quest3-ir/build`.
 Do not commit the key or local per-headset calibration.
+The local build output is `dist/quest-ir-headset-dev.apk`; release assets use
+the versioned filename above. Independently built APKs have a different signing
+key and cannot update an existing installation signed with the release key.
 
 The app bundles the controller and reader as assets. At first start after each
 boot, it extracts them directly from its installed APK into tmpfs through the
@@ -101,8 +106,11 @@ under a mutex after copying each result; Frida callbacks can run on a different
 thread from the supervisor. The earlier missing synchronization could stop IR
 after a few seconds even when no duration limit was requested.
 
-This is a development build. Visible IR, Start/Stop, extended operation, and
-app transitions need on-headset validation before calling it a stable release.
+The user confirmed that the corrected headset build works on October 29 after
+the RPC synchronization fix. The native supervisor also stayed active for
+several minutes with zero reported rendering or pose errors. This is a preview
+for the tested firmware; extended operation, individual controls, and repeated
+app transitions still need broader validation.
 
 ## Upstream components
 

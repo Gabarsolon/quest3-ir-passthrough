@@ -57,6 +57,7 @@ def main():
             target.write(output / name, 'assets/' + name)
         target.write(ROOT / 'headset/FRIDA-LICENSE.txt', 'assets/licenses/frida-core.txt')
         target.write(ROOT / 'LICENSE', 'assets/licenses/quest-ir.txt')
+        target.write(ROOT / 'tools/vendor/sgsr1/LICENSE', 'assets/licenses/sgsr1.txt')
     aligned = output / 'quest-ir-aligned.apk'
     run(sdk / 'zipalign.exe', '-f', '4', unsigned, aligned)
     keystore = CACHE / 'quest-ir-development.p12'

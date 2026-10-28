@@ -6,7 +6,7 @@ Run in your normal PowerShell. -DryRun checks the local plan without network acc
 [CmdletBinding()]
 param(
     [ValidatePattern('^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$')]
-    [string]$Tag = 'v0.1.0-preview.2',
+    [string]$Tag = 'v0.2.0-preview.1',
     [switch]$DryRun
 )
 

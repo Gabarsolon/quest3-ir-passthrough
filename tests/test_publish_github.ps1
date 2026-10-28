@@ -22,7 +22,7 @@ function MockGit {
         'merge-base' { if ($global:PublishMock.Diverged) { $global:LASTEXITCODE = 1 } }
         'ls-remote' {
             if ($a -contains '--tags') {
-                if ($global:PublishMock.TagHead) { "$($global:PublishMock.TagHead)`trefs/tags/v0.1.0-preview.2" }
+                if ($global:PublishMock.TagHead) { "$($global:PublishMock.TagHead)`trefs/tags/v0.2.0-preview.1" }
             } else { "$($global:PublishMock.Remote)`trefs/heads/main" }
         }
         'push' { $global:PublishMock.Remote = '1' * 40; $global:PublishMock.Mutations++ }
@@ -39,7 +39,7 @@ function MockGh {
                 else { $global:LASTEXITCODE = 1; 'Not authenticated' }
             } elseif ($a[-1] -like '*/releases') {
                 if ($global:PublishMock.Released) {
-                    '[[{"tag_name":"v0.1.0-preview.2","draft":false}]]'
+                    '[[{"tag_name":"v0.2.0-preview.1","draft":false}]]'
                 } else { '[[]]' }
             } else {
                 @{ private = $global:PublishMock.Private; permissions = @{push=$true;admin=$true} } | ConvertTo-Json
@@ -53,7 +53,7 @@ function MockGh {
                 if ($targetIndex -lt 0 -or $a[$targetIndex + 1] -ne ('1' * 40)) { throw 'Incorrect release target.' }
                 $global:PublishMock.Released = $true; $global:PublishMock.TagHead = '1' * 40
                 $global:PublishMock.Mutations++
-            } else { '{"url":"https://github.com/Gabarsolon/quest3-ir-passthrough/releases/tag/v0.1.0-preview.2","isDraft":false}' }
+            } else { '{"url":"https://github.com/Gabarsolon/quest3-ir-passthrough/releases/tag/v0.2.0-preview.1","isDraft":false}' }
         }
         default { throw "Unexpected gh call: $a" }
     }
