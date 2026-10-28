@@ -6,7 +6,7 @@ Run in your normal PowerShell. -DryRun checks the local plan without network acc
 [CmdletBinding()]
 param(
     [ValidatePattern('^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$')]
-    [string]$Tag = 'v0.1.0-preview.1',
+    [string]$Tag = 'v0.1.0-preview.2',
     [switch]$DryRun
 )
 
@@ -14,7 +14,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $Repository = 'Gabarsolon/quest3-ir-passthrough'
 $RepoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$NotesFile = Join-Path $RepoRoot 'docs\releases\v0.1.0-preview.1.md'
+$NotesFile = Join-Path $RepoRoot "docs\releases\$Tag.md"
 $GitExe = (Get-Command git -CommandType Application -ErrorAction Stop).Source
 $GhCommand = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue
 if ($GhCommand) {

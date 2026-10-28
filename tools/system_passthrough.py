@@ -358,8 +358,11 @@ def run(options):
         build = adb.shell("getprop ro.build.version.incremental").decode().strip()
         if build != SUPPORTED_BUILD:
             raise RuntimeError(f"This hook was validated on {SUPPORTED_BUILD}; connected build is {build}.")
-        if "uid=0(root)" not in root("id"):
-            raise RuntimeError("Temporary root is not active.")
+        try:
+            if "uid=0(root)" not in root("id"):
+                raise RuntimeError("Root identity check failed.")
+        except RuntimeError as exc:
+            raise RuntimeError("Temporary root is not active. Run tools/root_ionstack.ps1 over USB first.") from exc
         state["display_refresh"] = display_settings.enter_context(
             temporary_display_refresh(options.display_refresh))
         if state["display_refresh"]:
@@ -581,16 +584,19 @@ def run(options):
         state["status"] = "stopped"
         server.shutdown()
         server.server_close()
-        try:
-            current = adb.shell("pidof com.oculus.vrruntimeservice").decode().strip()
-            compositor_changed = session is not None and current != str(compositor)
-        except Exception:
-            compositor_changed = True
-        if compositor_changed:
-            print("IR controller stopped. The compositor exited/restarted or is unreachable; "
-                  "check normal RGB passthrough in the headset.", flush=True)
+        if script is None:
+            print("IR was not started; no compositor hook was installed.", flush=True)
         else:
-            print("IR hook removed. Normal RGB capture is restored.", flush=True)
+            try:
+                current = adb.shell("pidof com.oculus.vrruntimeservice").decode().strip()
+                compositor_changed = current != str(compositor)
+            except Exception:
+                compositor_changed = True
+            if compositor_changed:
+                print("IR controller stopped. The compositor exited/restarted or is unreachable; "
+                      "check normal RGB passthrough in the headset.", flush=True)
+            else:
+                print("IR hook removed. Normal RGB capture is restored.", flush=True)
 
 
 def main():
@@ -601,7 +607,7 @@ def main():
     commands.add_argument("--set-delay", type=int, metavar="MS", help="Change the running controller's experimental frame delay.")
     commands.add_argument("--set-pose-age", type=int, metavar="MS", help="Change the running IR pose timestamp estimate.")
     commands.add_argument("--set-filter", choices=["linear", "cubic", "sgsr"], help="Change the running controller's IR reconstruction filter.")
-    parser.add_argument("--serial", default=adb.SERIAL)
+    parser.add_argument("--serial", help="Explicit ADB target. Default prefers saved wireless, then this Quest's USB.")
     parser.add_argument("--frida-server", type=Path,
                         help="Matching host Android ARM64 Frida server to stage in RAM. Existing userdata helpers are preserved.")
     parser.add_argument("--ir-delay-ms", type=int, default=0, help="Experimental frame delay, 0–200 ms; default 0.")
@@ -653,7 +659,6 @@ def main():
         parser.error("pose age must be between 0 and 100 ms")
     if options.pose_correction and options.no_calibration:
         parser.error("pose correction requires factory calibration")
-    adb.SERIAL = options.serial
     try:
         if options.set_filter is not None:
             result = control("filter", filter=options.set_filter)
@@ -679,6 +684,10 @@ def main():
             else:
                 print(json.dumps(result, indent=2))
         else:
+            selected = adb.resolve_serial(options.serial)
+            if options.serial is None and selected != adb.SERIAL:
+                print("Saved wireless ADB is unavailable; using this Quest's USB connection.", flush=True)
+            adb.SERIAL = selected
             run(options)
         return 0
     except (RuntimeError, OSError, ValueError, subprocess.CalledProcessError) as exc:

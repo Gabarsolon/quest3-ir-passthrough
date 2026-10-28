@@ -30,6 +30,8 @@ Firmware build `51154110174900520` is the only accepted build.
 Wireless ADB is selected by the host-only `QUEST3_ADB_SERIAL` environment value,
 then `%LOCALAPPDATA%/quest3-ir/adb-target.txt`, falling back to the USB serial.
 `--serial IP:PORT` overrides the target. No persistent headset ADB property is set.
+If the preferred target is absent, the default launcher can use this Quest's USB
+connection. Explicit `--serial` never falls back to another transport.
 Paired Android Wireless debugging has been verified with temporary root; it
 does not require `adb tcpip` or an adbd restart. If using legacy TCP mode, enable
 it before restoring root: restarting ADB afterward can terminate the temporary

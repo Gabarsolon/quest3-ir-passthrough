@@ -26,6 +26,37 @@ were not modified.
 | Android base | 14, security patch 2025-01-06 |
 | SELinux | originally Enforcing (permissive once rooted) |
 
+## Run the saved IonStack payload
+
+Connect this Quest by **USB**, allow USB debugging, then run in PowerShell:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Users\remus\quest3-ir-passthrough\tools\root_ionstack.ps1"
+```
+
+This starts the local ADB server and explicitly selects the physical USB serial,
+checks for existing root, verifies the exact build/kernel and payload SHA-256,
+and compares all 28 saved config values with the successful historical config.
+It uses the already-staged `/data/local/tmp/preload` and `ionstack.conf`; no
+payload download, firmware update or Magisk installation occurs. The saved
+payload creates its existing su helpers in userdata; root itself clears on reboot.
+
+Wi-Fi is disabled before exploitation because this payload previously panicked
+with Wi-Fi on. Up to five attempts are allowed, with another attempt only after
+a detected reboot and fresh checks. A 150-second timeout stops the launcher;
+it does not prove the payload stopped. If it hangs, hold Power to reboot, then
+rerun. Logs are saved on the laptop under `%TEMP%/quest3-ir-root`. On failure
+Wi-Fi remains off to avoid disturbing a possibly running payload. On success,
+Wi-Fi is enabled even if it was initially off, and Android Wireless debugging is
+requested using the existing pairing; adbd and su are not restarted. Accept the
+network approval popup if shown, then paired wireless ADB can reconnect.
+
+`-CheckOnly` validates without running the exploit or changing Wi-Fi.
+`-Attempts 1` limits it to one attempt. `-KeepWifiOff` suppresses Wi-Fi restoration.
+An already-rooted headset skips exploitation and enables Wi-Fi unless suppressed.
+`-CheckOnly` never changes Wi-Fi, including when root is already active. This script does not start IR;
+use `tools/run_ir.ps1` afterward.
+
 ## Route taken: IonStack (CVE-2026-43499)
 
 `CVE-2026-43499` ("GhostLock") is a stack use-after-free in the rtmutex PI code
@@ -78,26 +109,70 @@ Permissive
   the real brick risk (AVB / anti-rollback -> hard brick, no recovery). The
   transient `preload` route at worst panics and reboots.
 
-## The dead end that came first: DirtyFrag (CVE-2026-43284)
+## Route B, re-examined: DirtyFrag (CVE-2026-43284) on v79
 
 The original plan was the DirtyFrag page-cache write (`V4bel/dirtyfrag`,
-`Henry1887/fuguquest`) to poison a loadable module and load it unsigned. It is
-blocked on v79 by SELinux policy, not by the bug itself.
+`Henry1887/fuguquest`) to poison a loadable module and load it unsigned. A first
+attempt on v79 failed and its notes under-claimed the cause: the bug itself was
+fine, the *hook host* was not.
 
-The chain needs one process that can both `open()` the target module file (from
-`vendor_file`) and create an `AF_INET` socket to stage the ESP SA. On v79 the
-only netdomain-ish daemons that can open module files are tracked under
-`u:r:trackingserver:s0`, and the AVC we kept hitting was:
+The chain needs (a) a daemon domain whose `open()` covers the carrier and config
+files, being the process that reloads a poisoned code page, and (b) a function
+in a file that `uid=2000 shell` may `open()`, so the poison can be staged. What
+the earlier attempt measured as "only `trackingserver` can open module files"
+was actually about which daemon mapped the hook library. A live probe (2026-10)
+established:
 
-```
-denied { read } ... comm="trackingservice" name="llcc_perfmon.ko"
-scontext=u:r:trackingserver:s0 tcontext=u:object_r:vendor_file:s0
-```
+- shell can `open()`: `system_lib_file`, `same_process_hal_file`,
+  `vndk_sp_file`; it cannot open `vendor_file`, `vendor_wcnss_service_exec`
+  or HAL exec files. That is enough to *stage* poisons, not enough to *load*
+  them into a carrier.
+- daemon domains that have both `vendor_file` open+read and UDP:
+  `rild`, `set-usb-cdc-mac`, `vendor_wcnss_service`, `vendor_wifidisplayhalservice`,
+  `hal_oculus_wifi_default` (`vendor.oculus.wifi-hal-1-0`).
+- the old hook host `libeva.so` (`same_process_hal_file`) is mapped by
+  `trackingservice`, whose domain cannot open `vendor_file`, hence the earlier
+  `comm="trackingservice" name="llcc_perfmon.ko"` AVC. The bug's page-cache
+  write was never the blocker.
 
-No domain does both, and only `u:r:kernel` can flip Enforcing. We asked
-"Given the open()+AF_INET conflict is fundamental on v79, how should I proceed?"
-and chose *search upstream / other LPE*. That search is what led to IonStack,
-which sidesteps the carrier problem entirely because it needs no module load.
+The adapted chain hooks **`/system/lib64/libnetd_client.so`** instead — shell
+opens it fine (`system_lib_file`), it has a 3412-byte executable gap at
+`0x32ac`, and both `vendor.oculus.wifi-hal-1-0` (`hal_oculus_wifi_default`) and
+`cnss-daemon` (`vendor_wcnss_service`) map it. `libnetd_client` is BIND_NOW
+with no `DT_INIT`/`INIT_ARRAY`, so the hook is a PLT-entry overwrite rather
+than an init-array redirect: the first word of the `socket@LIBC` PLT entry
+(entry `0x6bb0`, GOT `0x7260`) becomes a `b` into the gap stub; the stub keeps
+a one-shot flag in the lib's single `.data` byte at `0x8370` (on-disk value `1`,
+rewritten to `0` per process) and returns through the original PLT tail with
+`x16` re-derived, so normal socket calls keep working after the first call.
+
+Restart is driven by the same `libandroid_servers::dump` stub as upstream
+(`dumpsys input` makes *system_server* itself send `SETPROP2
+ctl.restart vendor.oculus.wifi-hal-1-0` on the property socket), then shell does
+`setprop ctl.start insmod_sh` for the root carrier, all already-proven for this
+OS family. Port lives in `C:\Users\remus\fuguquest` (target
+`targets/q3_51154110174900520.json`, `inject_lib` = libnetd_client PLT-hook
+fields; orchestrate selects the variant when `inject_lib.plt_off` exists).
+This local Fugu port and its `tools/root_fugu.ps1` developer wrapper are not
+included in the published IR release. IonStack remains the supported recovery
+launcher for the tested headset.
+
+Offline checks passed: build clean, stub fits (est. ~1.7 KB of the 3412-byte
+gap), guard/adrp/PLT-word encodings validated byte-for-byte. **Not yet run on
+the headset** — validation checklist when next connected:
+
+1. `tools/root_fugu.ps1 -CheckOnly` (build, SELinux = Enforcing, serial match).
+2. `tools/root_fugu.ps1` (default `--adb-root`); expect a `vendor.oculus.wifi-hal-1-0`
+   restart and AVCs from `hal_oculus_wifi_default` reading the carrier, then
+   `Permissive`, then new `adb shell` = uid 0.
+3. Recovery check: reboot restores Enforcing; Wi-Fi HAL restart via settings
+   toggle must still pass RGB/camera checks per AGENTS.md.
+4. `cnss-daemon` is a fallback hook host (no rc service name found, so it
+   cannot be `ctl.restart`-triggered; `vendor.oculus.wifi-hal-1-0` is the
+   restartable one).
+
+IonStack (route A above) is kept as the primary launcher until route B is
+validated on-device.
 
 ## Cleanup
 
@@ -124,4 +199,6 @@ headset. See [firmware-analysis.md](firmware-analysis.md) for the sensor map.
 - `F-19-F/IonStackQuest3` - Quest 3 port of IonStack
 - `XiaoMeow-1145/One-click-temporary-Root-for-Meta-Quest3-3s`
 - `NebuSec/CyberMeowfia` - IonStack / CVE-2026-43499 writeups
-- `V4bel/dirtyfrag`, `Henry1887/fuguquest` - DirtyFrag (CVE-2026-43284)
+- `V4bel/dirtyfrag`, `Henry1887/fuguquest` - DirtyFrag (CVE-2026-43284);
+  v79 port: local `C:\Users\remus\fuguquest` (+ commit-matched upstream),
+  launcher `tools/root_fugu.ps1`

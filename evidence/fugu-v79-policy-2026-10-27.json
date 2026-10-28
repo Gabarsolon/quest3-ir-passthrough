@@ -1,0 +1,105 @@
+{
+  "date": "2026-10-27",
+  "build": "51154110174900520",
+  "kernel": "5.10.226-g9505bf1c2b1a",
+  "method": "Direct kernel /sys/fs/selinux/access queries for explicit source/target contexts, using existing temporary root. Decoded using live class indices and permission bit positions. No policy/enforcement change or exploit executed by these queries.",
+  "currentEnforcementDuringQueries": "Permissive",
+  "interpretation": "These are computed policy permission bits, not successful syscalls made permissible by global enforcement being disabled. They do not establish reachable code execution or an end-to-end exploit.",
+  "domains": [
+    {
+      "domain": "trackingserver",
+      "vendorFileOpenRead": false,
+      "ownUdpCreateWriteConnectSetopt": true
+    },
+    {
+      "domain": "crash_dump",
+      "vendorFileOpenRead": true,
+      "ownUdpCreateWriteConnectSetopt": false
+    },
+    {
+      "domain": "rild",
+      "vendorFileOpenRead": true,
+      "ownUdpCreateWriteConnectSetopt": true
+    },
+    {
+      "domain": "set-usb-cdc-mac",
+      "vendorFileOpenRead": true,
+      "ownUdpCreateWriteConnectSetopt": true
+    },
+    {
+      "domain": "vendor_wcnss_service",
+      "vendorFileOpenRead": true,
+      "ownUdpCreateWriteConnectSetopt": true
+    },
+    {
+      "domain": "vendor_wifidisplayhalservice",
+      "vendorFileOpenRead": true,
+      "ownUdpCreateWriteConnectSetopt": true
+    },
+    {
+      "domain": "hal_oculus_wifi_default",
+      "vendorFileOpenRead": true,
+      "ownUdpCreateWriteConnectSetopt": true
+    },
+    {
+      "domain": "hal_oculus_sensors_default",
+      "vendorFileOpenRead": true,
+      "ownUdpCreateWriteConnectSetopt": false
+    },
+    {
+      "domain": "hal_graphics_composer_default",
+      "vendorFileOpenRead": true,
+      "ownUdpCreateWriteConnectSetopt": false
+    },
+    {
+      "domain": "init-insmod-sh",
+      "vendorFileOpenRead": true,
+      "ownUdpCreateWriteConnectSetopt": false
+    }
+  ],
+  "initException": {
+    "domain": "init",
+    "vendorFileOpenRead": true,
+    "ownUdpCreate": true,
+    "ownUdpWriteConnectSetopt": false
+  },
+  "runningCandidateServices": [
+    {
+      "domain": "hal_oculus_wifi_default",
+      "executable": "/odm/bin/hw/vendor.oculus.hardware.wifi@1.0-service"
+    },
+    {
+      "domain": "vendor_wcnss_service",
+      "executable": "/vendor/bin/cnss-daemon"
+    }
+  ],
+  "candidateLibrary": {
+    "path": "/system/lib64/libnetd_client.so",
+    "sha256": "a1db60abf7b6856989f35780610897ae304b8aee30f3b223e88696d7f58f33d2",
+    "mappedByBothCandidates": true,
+    "executableZeroRunFileOffset": 12972,
+    "executableZeroRunLength": 3412,
+    "hasInitArray": false,
+    "netdClientInitSocket": {
+      "address": 27348,
+      "instruction": "b 0x4b80",
+      "size": 4
+    },
+    "caution": "The existing constructor hook cannot be reused unchanged. Shared-library use across processes, entry dispatch, argument preservation, service trigger, seccomp and cleanup remain unvalidated."
+  },
+  "shellPermissions": {
+    "vendor_file": false,
+    "hal_oculus_wifi_default_exec": false,
+    "vendor_wcnss_service_exec": false,
+    "system_lib_file": true,
+    "same_process_hal_file": true,
+    "vndk_sp_file": true
+  },
+  "headsetChangesDuringAudit": [],
+  "endToEndPortWorking": false,
+  "remainingWork": [
+    "Confirm a context-restricted startup trigger and syscall access without disturbing unrelated processes.",
+    "Prototype and validate argument-preserving forwarding on an owned copy before touching any live shared library.",
+    "Validate recovery/cache restoration and the complete unrooted chain on a clean boot."
+  ]
+}

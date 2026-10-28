@@ -87,6 +87,12 @@ Use `--serial IP:PORT` to select a target explicitly. Disconnecting USB alone
 does not remove detached temporary root; the controller still needs its wireless
 connection for IR. Reboot or power loss clears root and RAM hooks.
 
+If the saved wireless connection is unavailable, the IR launcher can use this
+same Quest's connected USB serial. An explicit `--serial` selection is never
+silently replaced. To restore temporary root over USB, use
+`tools/root_ionstack.ps1`; after success it enables Wi-Fi and requests existing
+paired Wireless debugging. Accept the network approval popup when shown.
+
 ## Options and cleanup
 
 - **Display:** `--display-refresh 120` improves frame spacing for the 60 Hz IR
@@ -138,7 +144,9 @@ PowerShell terminal, choose an unused tag, for example:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\publish_github.ps1 -Tag v0.1.0-preview.2
 ```
 
-`v0.1.0-preview.1` describes an older commit. The script does not replace a tag
+The current published prototype is `v0.1.0-preview.2`; its
+[release notes](docs/releases/v0.1.0-preview.2.md) describe the fixes and limits.
+The script loads `docs/releases/<tag>.md` and does not replace a tag
 that points elsewhere. `-DryRun` checks local prerequisites without network
 access; publishing offers GitHub login if needed. It does not access the headset.
 

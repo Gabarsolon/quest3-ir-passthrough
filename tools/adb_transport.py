@@ -49,6 +49,22 @@ def connect(service, timeout=15, transport=True):
     return sock
 
 
+def resolve_serial(explicit=None):
+    """Prefer the saved wireless target; use this same Quest's USB if absent."""
+    with connect('host:devices-l', transport=False) as sock:
+        listing = readn(sock, int(readn(sock, 4), 16)).decode(errors='replace')
+    available = {parts[0] for line in listing.splitlines()
+                 if len(parts := line.split()) >= 2 and parts[1] == 'device'}
+    preferred = explicit or SERIAL
+    if preferred in available:
+        return preferred
+    usb = '2G0YC5ZF9Q01J0'
+    if explicit is None and usb in available:
+        return usb
+    raise RuntimeError(f'ADB target {preferred!r} is unavailable. Connect this Quest by USB '
+                       'or enable its paired Wireless debugging.')
+
+
 def shell(command, timeout=15):
     with connect("shell:" + command, timeout) as sock:
         chunks = []
