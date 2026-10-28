@@ -45,6 +45,11 @@ and remain diagnostic options.
 
 ## Run
 
+A development **Quest IR** headset app can now run the controller locally after
+temporary root is established. See [headset-only operation](docs/headset-controller.md)
+for the APK, Start/Stop controls, RAM scope, and current validation limits.
+The instructions below describe the maintained laptop controller.
+
 Requirements: Quest 3 on build **51154110174900520** (Horizon OS v79), active
 temporary root, an authorized ADB connection, Python with NumPy, and LLVM clang.
 Frida **17.23 or newer** is required for its ARM64 online-hook improvement;
@@ -138,10 +143,11 @@ system-passthrough guide describe the maintained implementation.
 ## Publishing
 
 To push committed changes and create a new public prerelease from your normal
-PowerShell terminal, choose an unused tag, for example:
+PowerShell terminal, choose an unused tag and first write matching notes in
+`docs/releases/<tag>.md`, for example:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\publish_github.ps1 -Tag v0.1.0-preview.2
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\publish_github.ps1 -Tag v0.2.0-preview.1
 ```
 
 The current published prototype is `v0.1.0-preview.2`; its

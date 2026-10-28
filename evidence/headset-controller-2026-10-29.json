@@ -1,0 +1,59 @@
+{
+  "recordedAt": "2026-10-28T23:24:04.130653+00:00",
+  "build": "51154110174900520",
+  "controller": "on-headset Frida Core 17.24.3",
+  "nativeSha256": "413a492f3ac897b9ef310534ab9f12eebd5b04c0c44a5aa3ee3407badd7837fd",
+  "apkSha256": "9b88d6b9db623a40b8ba920cc870308ceae68a2f7872125d5b3b1c2d9aa5b55a",
+  "rootRecoveryRunThisSession": false,
+  "firmwareWrites": false,
+  "ordinaryAppInstallApproved": true,
+  "calibrationCheck": {
+    "sampleDimensions": [
+      53,
+      41
+    ],
+    "maxRayMapErrorBothEyes": 0.0,
+    "poseAndRotationTolerance": 1e-12
+  },
+  "ownedProcessRpcStressTest": {
+    "roundTrips": 2000,
+    "binaryPayloadRoundTrips": 1000,
+    "result": "passed"
+  },
+  "appUidRootPreflight": {
+    "appUid": 10287,
+    "result": "passed"
+  },
+  "offlinePythonTests": 37,
+  "activeSnapshot": {
+    "substitutedDraws": 1813823,
+    "errors": 0,
+    "poseCorrectedDraws": 1813823,
+    "poseFailures": 0,
+    "imageRemaps": [
+      15434,
+      15492
+    ],
+    "sources": [
+      {
+        "eye": "left",
+        "uploads": 7458,
+        "changedSamples": 7458,
+        "sequence": 7530,
+        "valid": true
+      },
+      {
+        "eye": "right",
+        "uploads": 7458,
+        "changedSamples": 7458,
+        "sequence": 7530,
+        "valid": true
+      }
+    ]
+  },
+  "visualConfirmation": "pending after RPC synchronization fix",
+  "limitations": [
+    "Root recovery after reboot is still external.",
+    "App Start/Stop and repeated app transitions need visual validation."
+  ]
+}

@@ -70,6 +70,13 @@ def root(command, timeout=20):
     return output.strip()
 
 
+def check_native_controller():
+    native_status = root("if [ -x /dev/quest3-ir-session/headset/ir-headset ]; then "
+                         "/dev/quest3-ir-session/headset/ir-headset --status; fi")
+    if native_status and json.loads(native_status).get("status") != "stopped":
+        raise RuntimeError("Headset-native IR is running. Stop it in the Quest IR app before using the laptop controller.")
+
+
 def build_reader():
     source = HERE / "irfeed.c"
     digest = hashlib.sha256(source.read_bytes() + b"IRFEED_RAW_ONLY").hexdigest()[:16]
@@ -363,6 +370,7 @@ def run(options):
                 raise RuntimeError("Root identity check failed.")
         except RuntimeError as exc:
             raise RuntimeError("Temporary root is not active. Run tools/root_ionstack.ps1 over USB first.") from exc
+        check_native_controller()
         state["display_refresh"] = display_settings.enter_context(
             temporary_display_refresh(options.display_refresh))
         if state["display_refresh"]:
